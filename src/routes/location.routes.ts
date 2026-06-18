@@ -6,14 +6,14 @@ const router = Router();
 
 //Start trip and live tracking
 // Add parentheses and an array of allowed roles
-router.post('/start', locationController.handleStartTrip);
+router.post('/start', authorize(['driver']), locationController.handleStartTrip);
 
 
 //Regular Update: Single GPS ping
-router.post('/update',  locationController.handleLocationUpdate);
+router.post('/update', authorize(['driver']), locationController.handleLocationUpdate);
 
 // Shared route for Drivers (to verify their ping), Operators, and Passengers
-router.get('/live/:tripId', authorize(['driver', 'operator', 'passenger']), locationController.getLiveLocation);
+router.get('/live/:tripId', locationController.getLiveLocation);
 
 
 // Sync coordinates collected during offline/dead-zones

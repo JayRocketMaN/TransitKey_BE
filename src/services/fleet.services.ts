@@ -1,42 +1,37 @@
-import { supabase } from '../config/supabase.js';
+import { supabase } from "../config/supabase.js";
 
-export const getGlobalFleetOverview = async (filters: { 
-  companyName?: string; 
-  origin?: string; 
-  destination?: string; 
-}) => {
+interface FleetFilters {
+  companyName?: string;
+  origin?: string;
+  destination?: string;
+}
+
+export const getGlobalFleetOverview = async (filters: FleetFilters) => {
   let query = supabase
-    .from('companies')
+    .from("vehicles")
     .select(`
-      id,
-      name,
-      trips (
-        id,
-        bus_id,
-        origin_name,
-        destination_name,
-        price,           
-        occupied_seats,
-        ride_status,
-        vehicle_locations (
-          location,
-          updated_at
-        )
+      *,
+      parks (
+        park_name,
+        state_located,
+        park_location
+      ),
+      routes (
+        destination,
+        standard_fare
       )
     `)
-    .eq('trips.ride_status', 'in-progress');
+    .eq("status", "active"); // Only show buses ready to work
 
-  if (filters.companyName) {
-    query = query.ilike('name', `%${filters.companyName}%`);
-  }
   if (filters.origin) {
-    query = query.ilike('trips.origin_name', `%${filters.origin}%`);
+    query = query.eq("parks.state_located", filters.origin);
   }
+  
   if (filters.destination) {
-    query = query.ilike('trips.destination_name', `%${filters.destination}%`);
+    query = query.eq("routes.destination", filters.destination);
   }
 
   const { data, error } = await query;
-  if (error) throw new Error(error.message);
+  if (error) throw error;
   return data;
 };

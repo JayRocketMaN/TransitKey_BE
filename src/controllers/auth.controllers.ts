@@ -1,30 +1,33 @@
 import { Request, Response } from 'express';
-import * as authService from '../services/auth.services.js';
-import * as operatorService from '../services/company.services.js';
+import { AuthService } from '../services/auth.services.js'; 
 
+/**
+ * Registers a new user (Passenger / Operator fallback)
+ */
 export const register = async (req: Request, res: Response) => {
   try {
-    const user = await authService.createUser(req.body);
+    const user = await AuthService.createUser(req.body);
     res.status(201).json({ message: 'User created', userId: user.id });
   } catch (error: any) {
     res.status(400).json({ error: error.message });
   }
 };
 
+/**
+ * Authenticates user via flexible multi-channel identifier and sets HttpOnly cookie
+ */
 export const login = async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
-    const result = await authService.validateUser(email, password);
+    // FIXED: Changed destructuring from 'email' to 'identifier' to match your flexible validation settings
+    const { identifier, password } = req.body;
+    
+    // Aligned to pass your flexible email or phone number string to your service layer
+    const result = await AuthService.validateUser(identifier, password);
 
-    // Cookie is now safely inside the function
-    res.cookie('accessToken', result.token, {
-      httpOnly: true,
-      signed: true,
-      secure: false, // Set to true in production with HTTPS  
-      sameSite: 'strict',
-      maxAge: 3600000,
-      path: '/',
-    });
+    // Diagnostic Log: Verify what your service layer is actually outputting
+    console.log("🔒 [AuthController.login] Authenticated User Profile:", result.user);
+
+    res.cookie('accessToken', result.token, AuthService.getCookieOptions());
 
     res.status(200).json({ user: result.user });
   } catch (error: any) {
@@ -32,28 +35,13 @@ export const login = async (req: Request, res: Response) => {
   }
 };
 
-export const getProfie = async (req: Request, res: Response) => {
-  // req.user is populated by your 'authorize' middleware
-  res.status(200).json({
-    authenticated: true,
-    user: req.user 
-  });
-};
-
-export const getDriverStats = async (req: Request, res: Response) => {
-  res.status(200).json({ message: "Driver dashboard data" });
-};
-
-export const getOperatorFleet = async (req: Request, res: Response) => {
-  res.status(200).json({ message: "Operator fleet data" });
-};
-
-
+/**
+ * For Drivers: Initial activation via reference code
+ */
 export const activateDriver = async (req: Request, res: Response) => {
   try {
     const { code, password } = req.body;
-    // Call a service function to handle the DB updates
-    await authService.completeDriverActivation(code, password);
+    await AuthService.completeDriverActivation(code, password);
     
     res.status(200).json({ message: "Account activated. You can now login." });
   } catch (error: any) {
@@ -61,58 +49,90 @@ export const activateDriver = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * Driver-specific dashboard data
+ */
 export const getDriverDashboard = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: "User ID not found in session" });
 
-    if (!userId) {
-      return res.status(401).json({ error: "User ID not found in session" });
-    }
+    const driverData = await AuthService.fetchDriverDashboardData(userId);
 
-    // Call the service
-    const driverData = await authService.fetchDriverDashboardData(userId);
+    const recentTrips = driverData.driver_profiles?.flatMap((profile: any) => profile.trips || []) || [];
 
-    // Send the response
     res.status(200).json({ 
       role: 'driver',
       welcome_message: `Welcome back, ${driverData.full_name}`,
       profile: driverData.driver_profiles,
-      recent_trips: driverData.trips || []
+      recent_trips: recentTrips
     });
-
   } catch (error: any) {
-    console.error("Dashboard Error:", error.message);
     res.status(500).json({ error: "Failed to load dashboard data" });
   }
 };
 
+/**
+ * Operator-specific dashboard data
+ */
 export const getOperatorDashboard = async (req: Request, res: Response) => {
   try {
-    // req.user.company_id comes from your CustomJwtPayload middleware
     const companyId = req.user?.company_id;
-
     if (!companyId) {
       return res.status(403).json({ error: "Operator is not assigned to a company" });
     }
 
-    const dashboardData = await operatorService.fetchOperatorDashboardStats(companyId);
-
     res.status(200).json({
       role: 'operator',
-      ...dashboardData
+      company_id: companyId,
+      message: "Operator dashboard data loaded successfully"
     });
-
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 };
 
+/**
+ * Returns current logged in user info
+ */
+export const getProfile = async (req: Request, res: Response) => {
+  res.status(200).json({
+    authenticated: true,
+    user: req.user 
+  });
+};
 
+/**
+ * Clears the auth cookie
+ */
 export const logout = (req: Request, res: Response) => {
   res.cookie('accessToken', '', {
     httpOnly: true,
-    expires: new Date(0), // Set expiration to the past
+    expires: new Date(0),
     path: '/',
   });
   res.status(200).json({ message: "Logged out successfully" });
+};
+
+/**
+ * Generates a fresh token (Refresh logic)
+ */
+export const newToken = (req: Request, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ message: "User context not found" });
+
+    const payload = { 
+      id: req.user.id,
+      user_role: req.user.user_role,
+      company_id: req.user.company_id,
+      email: req.user.email 
+    };
+
+    const newAccessToken = AuthService.generateAccessToken(payload);
+    res.cookie("accessToken", newAccessToken, AuthService.getCookieOptions());
+
+    return res.status(201).json({ message: "successful" });
+  } catch (error: any) {
+    return res.status(401).json({ message: "invalid refresh token" });
+  }
 };

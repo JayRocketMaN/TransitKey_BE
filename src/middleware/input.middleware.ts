@@ -1,8 +1,11 @@
 import { Request, Response, NextFunction } from "express";
 import { body, validationResult, ValidationChain } from "express-validator";
+import bcrypt from "bcryptjs"; // Aligned with your AuthService encryption packages
 
+// ==========================================
+// 1. INDIVIDUAL VALIDATION RULES
+// ==========================================
 
-// Individual validation rules typed as ValidationChain
 export const emailValidation: ValidationChain = body("email")
   .optional()
   .isEmail()
@@ -15,15 +18,44 @@ export const passwordValidation: ValidationChain = body("password")
   .isLength({ min: 6 })
   .withMessage("Password must be 6+ characters");
 
-export const numberValidation: ValidationChain = body("number")
+// Enforces confirmation alignment inside the validation layer BEFORE encryption occurs
+export const confirmPasswordValidation: ValidationChain = body("confirmPassword")
+  .notEmpty()
+  .withMessage("Confirm password is required")
+  .custom((value, { req }) => {
+    if (value !== req.body.password) {
+      throw new Error("Password confirmation values do not match.");
+    }
+    return true;
+  });
+
+// Renamed key path match parameter from 'number' to 'phone_number'
+export const phoneValidation: ValidationChain = body("phone_number")
   .notEmpty()
   .withMessage("Phone number is required");
 
-export const nameValidation: ValidationChain = body("name")
-  .isLength({ min: 5 })
-  .withMessage("Name must be between 5 and 200 characters");
+// Renamed key path match parameter from 'name' to 'company_name'
+export const companyNameValidation: ValidationChain = body("company_name")
+  .isLength({ min: 5, max: 200 })
+  .withMessage("Company name must be between 5 and 200 characters");
 
-// The validation execution middleware
+export const passengerNameValidation: ValidationChain = body("full_name")
+  .isLength({ min: 3, max: 100 })
+  .withMessage("Full name must be between 3 and 100 characters");
+
+export const passengerPhoneValidation: ValidationChain = body("phone_number")
+  .notEmpty()
+  .withMessage("Phone number is required");
+
+// Flexible login rule: Validates that the identifier field is not empty
+export const loginIdentifierValidation: ValidationChain = body("identifier")
+  .notEmpty()
+  .withMessage("Email or Phone number is required to login");
+
+// ==========================================
+// 2. CORE EXECUTION MIDDLEWARES
+// ==========================================
+
 export const validateInput = (
   req: Request, 
   res: Response, 
@@ -36,17 +68,64 @@ export const validateInput = (
   next();
 };
 
-// Bundled rules for your routes
+/**
+ * AUTOMATED HASHING ENGINE
+ * Intercepts valid request bodies and single-hashes passwords before reaching your services
+ */
+export const hashPasswordPayload = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const passwordKey = req.body.password;
+    if (passwordKey) {
+      const salt = await bcrypt.genSalt(10);
+      req.body.password = await bcrypt.hash(passwordKey, salt);
+    }
+    next();
+  } catch (error: any) {
+    console.error("💥 Global Hash Processing Failure:", error.message);
+    return res.status(500).json({ error: "Internal Server Error during security encryption." });
+  }
+};
+
+// ==========================================
+// 3. BUNDLED ROUTE RULES
+// ==========================================
+
+// For Manager / Admin Registration
 export const registerRules = [
   emailValidation,
   passwordValidation,
-  numberValidation,
-  nameValidation,
+  confirmPasswordValidation, 
+  phoneValidation,        
+  companyNameValidation,  
   validateInput,
+  hashPasswordPayload 
 ];
 
+// ✅ UPDATED STANDARD LOGIN BUNDLE: Uses dynamic loginIdentifierValidation to check for 'identifier' instead of strict 'email'
 export const loginRules = [
+  loginIdentifierValidation,
   passwordValidation,
-  numberValidation,
+  validateInput 
+];
+
+// For Passenger Registration
+export const passengerRegisterRules = [
+  emailValidation,
+  passwordValidation,
+  confirmPasswordValidation,
+  passengerPhoneValidation,
+  passengerNameValidation,
   validateInput,
+  hashPasswordPayload 
+];
+
+// For Flexible Authentication Login (Passenger-specific alias)
+export const passengerLoginRules = [
+  loginIdentifierValidation,
+  passwordValidation,
+  validateInput
 ];

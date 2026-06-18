@@ -21,6 +21,7 @@ export const authorize = (allowedRoles: string[]) => {
       // 2. Verify the token securely
       const decoded = jwt.verify(accessToken, process.env.JWT_SECRET!) as CustomJwtPayload;
       
+      console.log("Decoded Token Payload:", decoded); // Updated log to see everything inside the cookie
       console.log("Decoded User Role:", decoded.user_role);
       console.log("Allowed Roles:", allowedRoles);
 
@@ -30,8 +31,13 @@ export const authorize = (allowedRoles: string[]) => {
         return res.status(403).json({ message: "Access Denied - Insufficient permissions" });
       }
 
-      // 4. Attach to request for the next controller
-      req.user = decoded;
+      // 4. Normalize company fields to guarantee req.user.company_id exists
+      req.user = {
+        ...decoded,
+        company_id: decoded.company_id || (decoded as any).companyId
+      };
+      
+      console.log("Final attached req.user configuration:", req.user);
       next();
     } catch (error: any) {
       console.log("JWT Verification Failed:", error.message);
