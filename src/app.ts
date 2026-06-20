@@ -16,11 +16,12 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
 // --- 2. MIDDLEWARE & CORS ---
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "transit-key.vercel.app",
+  origin: process.env.FRONTEND_URL || "https://vercel.app", // Fixed: Added https://
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   credentials: true,
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
+
 
 app.use(cookieParser(process.env.COOKIE_SECRET));
 app.use(express.json());
