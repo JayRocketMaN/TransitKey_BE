@@ -16,7 +16,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
 // --- 2. MIDDLEWARE & CORS ---
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:5173",
+  origin: process.env.FRONTEND_URL || "transit-key.vercel.app",
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   credentials: true,
   allowedHeaders: ["Content-Type", "Authorization"]
