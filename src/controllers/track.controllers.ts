@@ -146,7 +146,8 @@ export const getAllRoutes = async (req: Request, res: Response) => {
     const { data, error } = await RouteService.fetchAllRoutesWithParks();
     if (error) return res.status(500).json({ error: error.message });
 
-    const formatted = data.map((r: any) => ({
+     
+    const formatted = (data || []).map((r: any) => ({
       route_id: r.id,
       route_name: r.route_name,
       start_terminal: r.start_terminal,
@@ -157,7 +158,7 @@ export const getAllRoutes = async (req: Request, res: Response) => {
       stops: r.stops || [],
       starting_point: {
         state: r.companies?.state_located || "Unknown",
-        park_name: r.companies?.name || "Unknown Company",
+        park_name: r.companies?.company_name || "Unknown Company", // 
       },
     }));
 

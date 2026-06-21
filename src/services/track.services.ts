@@ -12,7 +12,7 @@ export interface RouteInput {
 
 export class RouteService {
   /**
-   *Points to 'companies' table and 'owner_id' column
+   * Points to 'companies' table and 'owner_id' column
    */
   static async getParkByOperator(operatorId: string) {
     return await supabase
@@ -34,10 +34,10 @@ export class RouteService {
           route_name: data.route_name.trim(),
           start_terminal: data.start_terminal.trim(),
           end_terminal: data.end_terminal.trim(),
-          distance_km: data.distance_km ?? null,
-          duration_minutes: data.duration_minutes ?? null,
+          distance_km: data.distance_km || null, 
+          duration_minutes: data.duration_minutes || null, 
           fare: data.fare,
-          stops: data.stops ?? [] 
+          stops: data.stops || [] 
         },
       ])
       .select()
@@ -69,7 +69,7 @@ export class RouteService {
   }
 
   /**
-   *Fetches all routes cross-joining the company profile contexts
+   * Fetches all routes cross-joining the company profile contexts
    */
   static async fetchAllRoutesWithParks() {
     return await supabase
@@ -85,12 +85,11 @@ export class RouteService {
         stops,
         created_at,
         companies (
-          name,
-          address
+          id,
+          company_name,
+          owner_id
         )
       `)
       .order("route_name", { ascending: true });
   }
 }
-
-
