@@ -51,7 +51,7 @@ export class DriverService {
       bus_plate_number: driverData.bus_plate_number || null,
       bus_type: driverData.bus_type || null,               
       license_number: driverData.license || driverData.license_number || null,
-      license_type: driverData.license_type || null
+      license_type: driverData.license_type || null,
       vehicle_class: driverData.vehicle_class || null,
       years_of_experience: parseInt(driverData.years_of_experience) || 0,
     };
@@ -91,12 +91,12 @@ export class DriverService {
 
     // Normalize phone formatting inputs
     if (updateData.phone || updateData.phone_number) {
-      mappedUpdate.phone_number = updateData.phone ?? updateData.phone_number;
+      mappedUpdate.phone_number = updateData.phone || updateData.phone_number;
     }
 
     // Map license variations to database structure
     if (updateData.license || updateData.license_number) {
-      mappedUpdate.license_number = updateData.license ?? updateData.license_number;
+      mappedUpdate.license_number = updateData.license || updateData.license_number;
     }
 
     if (updateData.license_type) {
