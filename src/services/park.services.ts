@@ -9,8 +9,7 @@ export interface OperatorCompanyRegistrationInput {
 
 export class ParkService {
   /**
-   * 1. Check if a company name is already registered
-   * ALIGNED: Unpacks the object to return raw row details or null directly, resolving your TS compilation alert
+   *Check if a company name is already registered
    */
   static async findParkByName(name: string) {
     const { data, error } = await supabase
@@ -24,11 +23,9 @@ export class ParkService {
   }
 
   /**
-   * 2. Registers Operator AND creates Company Park profile atomically
+   *Registers Operator AND creates Company Park profile atomically
    */
   static async registerOperatorWithCompany(input: OperatorCompanyRegistrationInput) {
-    // Step A: Create the core login user account entry inside 'my_users' table
-    // ALIGNED: Removed 'phone_number' and 'user_role' columns to fix your schema cache failure!
     const { data: userRow, error: userError } = await supabase
       .from("my_users")
       .insert([{
@@ -41,14 +38,13 @@ export class ParkService {
       .single();
 
     if (userError) {
-      console.error("❌ User Account Insertion Crash:", userError.message);
+      console.error(" User Account Insertion Crash:", userError.message);
       throw userError;
     }
 
-    console.log("➡️ User created successfully with ID:", userRow.id, ". Proceeding to create company profile...");
+    console.log("User created successfully with ID:", userRow.id, ". Proceeding to create company profile...");
 
-    // Step B: Instantly initialize the Company profile, setting the new user's ID as the 'owner_id'
-    // ALIGNED: Storing the phone number cleanly inside the company address metadata to avoid losing data
+    //Instantly initialize the Company profile, setting the new user's ID as the 'owner_id'
     const { data: companyRow, error: companyError } = await supabase
       .from("companies")
       .insert([{
@@ -61,15 +57,15 @@ export class ParkService {
       .single();
 
     if (companyError) {
-      console.error("❌ Company Table Insertion Crash:", companyError.message);
-      // Rollback safety fallback: Clear out the unlinked user row to avoid leaving ghost data
+      console.error("Company Table Insertion Crash:", companyError.message);
+      //Clear out the unlinked user row to avoid leaving ghost data
       await supabase.from("my_users").delete().eq("id", userRow.id);
       throw companyError;
     }
 
-    console.log("➡️ Company profile created successfully with ID:", companyRow.id, ". Performing final link step...");
+    console.log("Company profile created successfully with ID:", companyRow.id, ". Performing final link step...");
 
-    // Step C: Update the user row to store its own company_id reference for seamless authentication sessions
+    //Update the user row to store its own company_id reference for seamless authentication sessions
     const { error: linkError } = await supabase
       .from("my_users")
       .update({ 
@@ -79,7 +75,7 @@ export class ParkService {
       .eq("id", userRow.id);
 
     if (linkError) {
-      console.error("❌ Final Session Linking Failure:", linkError.message);
+      console.error("Final Session Linking Failure:", linkError.message);
     }
 
     return {
@@ -92,7 +88,6 @@ export class ParkService {
 
   /**
    * 3. RESTORED: Onboard a New Driver (User + Profile + Activation Code)
-   * ALIGNED: Removed invalid columns from user creation block to safeguard your driver onboarding flow
    */
   static async createDriverWithProfile(operator: any, formData: any) {
     const activationCode = Math.floor(100000 + Math.random() * 900000).toString();
@@ -134,7 +129,7 @@ export class ParkService {
   }
 
   /**
-   * 4. Update company/park details
+   Update company/park details
    */
   static async updateParkByOperator(operatorId: string, updateData: any) {
     const mappedData: any = {};
@@ -153,7 +148,7 @@ export class ParkService {
   }
 
   /**
-   * 5. Utility Fetcher
+   *Utility Fetcher
    */
   static async getParkByOperator(operatorId: string) {
     const { data, error } = await supabase

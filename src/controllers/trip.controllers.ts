@@ -1,10 +1,10 @@
 import { Request, Response } from "express";
 import { TripService, TripInput } from "../services/trip.services.js";
-import { supabase } from "../config/supabase.js"; // 🧠 Injected to run the strict vehicles fleet check
+import { supabase } from "../config/supabase.js"; //
 
 export class TripController {
   /**
-   * 1. Creates/Schedules a new journey transit manifest
+   *Creates/Schedules a new journey transit manifest
    * STRICT REGISTRY CHECK: Validates vehicle existence, park ownership, and capacity limits.
    */
   static async createTrip(req: Request, res: Response) {
@@ -13,8 +13,8 @@ export class TripController {
       const userRole = req.user?.user_role || (req.user as any)?.role;
       const jwtCompanyId = req.user?.company_id || (req.user as any)?.company_id;
 
-      // 🔍 DIAGNOSTIC LOG: Watch your running terminal when you hit Postman!
-      console.log("🚀 [TripController.createTrip] Handshake -> Role:", userRole, " | User ID:", operatorId);
+      //DIAGNOSTIC LOG: Watch terminal for issues
+      console.log(" [TripController.createTrip] Handshake -> Role:", userRole, " | User ID:", operatorId);
 
       if (userRole !== 'admin' || !operatorId) {
         return res.status(403).json({ message: "Only operators can create trips." });
@@ -27,13 +27,13 @@ export class TripController {
       const inputBusId = req.body.bus_id || req.body.busId;
       if (!inputBusId) return res.status(400).json({ error: "bus_id (Vehicle UUID) is a required field." });
 
-      // 🧠 STRICT FLEET SECURITY CHECK: Query your vehicles table
-      // Validates: 1) Vehicle exists, 2) Linked to this operator's park, 3) Status is active
+      
+      // Validates:Vehicle exists, Linked to this operator's park, Status is active
       const { data: verifiedVehicle, error: vehicleError } = await supabase
         .from("vehicles")
         .select("id, capacity")
         .eq("id", inputBusId)
-        .eq("park_id", jwtCompanyId) // Enforces rigid operator park cross-boundaries
+        .eq("park_id", jwtCompanyId) 
         .eq("status", "active")
         .maybeSingle();
 
@@ -55,7 +55,7 @@ export class TripController {
         origin_name: req.body.origin_name || req.body.originName,
         destination_name: req.body.destination_name || req.body.destinationName,
         price: req.body.price !== undefined ? parseFloat(req.body.price) : 0.00,
-        total_seats: verifiedVehicle.capacity || 14, // 🧠 AUTOMATION: Inherits registered capacity seamlessly!
+        total_seats: verifiedVehicle.capacity || 14, // Inherits capacity directly from the verified vehicle record 
       };
 
       // Early explicit validation checks before querying database
@@ -63,14 +63,14 @@ export class TripController {
       if (!tripData.origin_name) return res.status(400).json({ error: "origin_name is a required field." });
       if (!tripData.destination_name) return res.status(400).json({ error: "destination_name is a required field." });
       
-      // ALIGNED: Passes the validated company ID context directly to comply with your foreign key rules
+      //Passes the validated company ID
       const result = await TripService.createTrip(jwtCompanyId, tripData);
 
       const data = (result as any).data || result;
       const error = (result as any).error;
 
       if (error) {
-        // Intercept relationship constraint mismatch messages (e.g. Invalid Driver Profile UUID)
+        // prevent constraint mismatch messages 
         if (error.code === "23505" || error.code === "23503") {
           return res.status(400).json({ error: "Database relation constraint violation. Please verify that your driver_id or company_id values are valid records." });
         }
@@ -84,7 +84,7 @@ export class TripController {
   }
 
   /**
-   * 2. Transitions trip status to 'in-progress' when driver leaves terminal park
+   *Transitions trip status to 'in-progress' when driver leaves terminal park
    */
   static async startTrip(req: Request, res: Response) {
     try {
@@ -94,7 +94,7 @@ export class TripController {
         return res.status(400).json({ error: "trip_id is required in request body" });
       }
 
-      // Changed status 'in transit' to database-supported constraint value 'in-progress'
+    
       const result = await TripService.updateTripStatus(tripId, 'in-progress');
       
       const data = (result as any).data || result;
@@ -108,7 +108,7 @@ export class TripController {
   }
 
   /**
-   * 3. Get active company fleet trip dashboard manifests
+   *Get active company fleet trip dashboard manifests
    */
   static async getMyTrips(req: Request, res: Response) {
     try {
@@ -132,7 +132,7 @@ export class TripController {
   }
 
   /**
-   * 4. Completes a trip journey
+   *Completes a trip journey
    */
   static async completeTrip(req: Request, res: Response) {
     try {
@@ -145,7 +145,7 @@ export class TripController {
 
       const normalizedStatus = String(status).toLowerCase().trim();
       
-      // Filter out statuses to perfectly align with your Postgres constraints check
+       
       const databaseAllowedStatuses = ["completed", "cancelled"];
 
       if (!databaseAllowedStatuses.includes(normalizedStatus)) {
@@ -154,7 +154,7 @@ export class TripController {
         });
       }
 
-      // Sync status updates across your service endpoints
+      // Sync status updates 
       const result = await TripService.updateTripStatus(tripId, normalizedStatus as any);
       
       const data = (result as any).data || result;
@@ -172,7 +172,6 @@ export class TripController {
   }
 
   /**
-   * 5. FIGMA UI FEATURE: Upcoming Trips Summary Dashboard Component
    * Fetches all pending holds and paid tickets assigned explicitly to the logged-in user
    */
   static async getMySummary(req: Request, res: Response) {

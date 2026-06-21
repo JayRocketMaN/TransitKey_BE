@@ -3,13 +3,13 @@ import { DriverService, DriverInput } from "../services/driver.services.js";
 import { ParkService } from "../services/park.services.js"; 
 
 /**
- * Add a new driver to the operator's company (Creates Auth Staging + Profile + Code)
+ * Add a new driver to the operator's company (Creates Auth + Profile + Code)
  */
 export const addDriver = async (req: Request, res: Response) => {
   try {
     const { 
       name, 
-      full_name,             // Support both variations for frontend flexibility
+      full_name,             
       email, 
       phone, 
       phone_number, 
@@ -27,13 +27,13 @@ export const addDriver = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Phone number is required" });
     }
 
-    // Capture the name variation accurately matching your NOT NULL rules
+    // Capture the name variation accurately matching NOT NULL rules
     const driverFullName = full_name ?? name;
     if (!driverFullName || !email) {
       return res.status(400).json({ error: "Driver name and email are required to create their account." });
     }
 
-    // Strict validation check for your your mixed-case Enums
+    // Strict validation check for mixed-case and type Enums
     const validBusTypes = ['BRT(Bus Rapid Transit)', 'Danfo', 'Luxury Coach', 'Mini Bus', 'Shuttle'];
     if (bus_type && !validBusTypes.includes(bus_type)) {
       return res.status(400).json({ 
@@ -53,19 +53,19 @@ export const addDriver = async (req: Request, res: Response) => {
       return res.status(401).json({ error: "Unauthorized: No operator found" });
     }
 
-    // 1. Verify driver uniqueness metrics
+    //Verify driver uniqueness metrics
     const { data: driverExist } = await DriverService.findDriverByPhone(phoneValue);
     if (driverExist) {
       return res.status(400).json({ error: "A driver with this phone number already exists." });
     }
 
-    // 2. Fetch company ownership contexts
+    //Fetch company ownership contexts
     const { data: parkData } = await DriverService.getParkByOperatorId(operatorId);
     if (!parkData) {
       return res.status(404).json({ error: "No park found for this operator. Please register your park first." });
     }
 
-    console.log(`📡 Onboarding driver [${email}] under company: ${parkData.id}`);
+    console.log(`Onboarding driver [${email}] under company: ${parkData.id}`);
 
     // Structuring the operator context explicitly so ParkService receives 'company_id' correctly
     const operatorContext = {
@@ -73,7 +73,7 @@ export const addDriver = async (req: Request, res: Response) => {
       company_id: parkData.id
     };
 
-    // 3. EXECUTION HANDSHAKE: Call ParkService method to generate user row + profile row + 6-digit code atomically
+    // EXECUTION HANDSHAKE: Call ParkService method to generate user row + profile row + 6-digit code atomically
     const activationCode = await ParkService.createDriverWithProfile(
       operatorContext, 
       {
@@ -89,14 +89,14 @@ export const addDriver = async (req: Request, res: Response) => {
       }
     );
 
-    // 4. Return the code back directly to Postman
+    //Return the code back directly to Postman
     return res.status(201).json({
       message: "Driver added successfully and authentication staging account generated.",
       activation_code: activationCode
     });
 
   } catch (error: any) {
-    console.error("💥 Controller Driver Insertion Crash:", error.message);
+    console.error("Controller Driver Insertion Crash:", error.message);
     
     // Explicit clean messaging for check constraint failures (like invalid emails)
     if (error.message?.includes('chk_valid_email')) {
@@ -137,27 +137,54 @@ export const editDriver = async (req: Request, res: Response) => {
 
     if (!operatorId) return res.status(401).json({ error: "Unauthorized" });
 
+    //Fetch operator's park
     const { data: park } = await DriverService.getParkByOperatorId(operatorId);
     if (!park) return res.status(404).json({ error: "Company not found" });
 
-    // Restructuring update block to accept name updates cleanly
-    const updateData: any = { ...req.body };
-    if (updateData.name && !updateData.full_name) {
-      updateData.full_name = updateData.name;
-      delete updateData.name;
+    //Fetch existing driver FIRST to verify ownership before making any changes
+    const { data: existingDriver, error: fetchError } = await DriverService.getDriverById(id as string);
+    if (fetchError || !existingDriver) {
+      return res.status(404).json({ error: "Driver not found" });
     }
 
-    // Strict parameter validation for update actions on Enums
+    // Strict ownership verification check
+    if (existingDriver.park_id !== park.id) {
+      return res.status(403).json({ error: "Forbidden: Access Denied" });
+    }
+
+    //Extract and normalize allowed update parameters from req.body
+    const { name, full_name, phone, phone_number, bus_type, email, license_number, status } = req.body;
+    
+    const updateData: any = {};
+
+    // Handle names flexibly
+    if (full_name) updateData.full_name = full_name;
+    else if (name) updateData.full_name = name;
+
+    // Handle phones flexibly
+    if (phone_number) updateData.phone_number = phone_number;
+    else if (phone) updateData.phone_number = phone;
+
+    // Map other common mutable driver fields explicitly
+    if (email) updateData.email = email;
+    if (license_number) updateData.license_number = license_number;
+    if (status) updateData.status = status;
+
+    //Validate Enum parameters cleanly
     const validBusTypes = ['BRT(Bus Rapid Transit)', 'Danfo', 'Luxury Coach', 'Mini Bus', 'Shuttle'];
-    if (updateData.bus_type && !validBusTypes.includes(updateData.bus_type)) {
-      return res.status(400).json({ error: `Invalid bus_type string value.` });
+    if (bus_type) {
+      if (!validBusTypes.includes(bus_type)) {
+        return res.status(400).json({ error: `Invalid bus_type string value.` });
+      }
+      updateData.bus_type = bus_type;
     }
 
-    if (updateData.phone) {
-      updateData.phone_number = updateData.phone;
-      delete updateData.phone;
+    // Prevent executing an empty update query
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ error: "No valid update fields provided." });
     }
 
+    //Execute the update securely
     const { data: updatedDriver, error: updateError } = await DriverService.updateDriver(id as string, updateData);
 
     if (updateError) {
@@ -165,11 +192,6 @@ export const editDriver = async (req: Request, res: Response) => {
         return res.status(400).json({ error: "Invalid email format update request." });
       }
       return res.status(500).json({ error: updateError.message });
-    }
-
-    // Use park_id checking matrix to ensure data privacy controls align perfectly with relational fields
-    if (updatedDriver.park_id !== park.id) {
-      return res.status(403).json({ error: "Forbidden: Access Denied" });
     }
 
     return res.status(200).json({

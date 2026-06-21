@@ -1,10 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import { body, validationResult, ValidationChain } from "express-validator";
-import bcrypt from "bcryptjs"; // Aligned with your AuthService encryption packages
+import bcrypt from "bcryptjs"; 
 
-// ==========================================
-// 1. INDIVIDUAL VALIDATION RULES
-// ==========================================
+//INDIVIDUAL VALIDATION RULES
 
 export const emailValidation: ValidationChain = body("email")
   .optional()
@@ -18,7 +16,7 @@ export const passwordValidation: ValidationChain = body("password")
   .isLength({ min: 6 })
   .withMessage("Password must be 6+ characters");
 
-// Enforces confirmation alignment inside the validation layer BEFORE encryption occurs
+// Enforces confirmation alignment before encryption
 export const confirmPasswordValidation: ValidationChain = body("confirmPassword")
   .notEmpty()
   .withMessage("Confirm password is required")
@@ -29,12 +27,11 @@ export const confirmPasswordValidation: ValidationChain = body("confirmPassword"
     return true;
   });
 
-// Renamed key path match parameter from 'number' to 'phone_number'
 export const phoneValidation: ValidationChain = body("phone_number")
   .notEmpty()
   .withMessage("Phone number is required");
 
-// Renamed key path match parameter from 'name' to 'company_name'
+
 export const companyNameValidation: ValidationChain = body("company_name")
   .isLength({ min: 5, max: 200 })
   .withMessage("Company name must be between 5 and 200 characters");
@@ -47,14 +44,13 @@ export const passengerPhoneValidation: ValidationChain = body("phone_number")
   .notEmpty()
   .withMessage("Phone number is required");
 
-// Flexible login rule: Validates that the identifier field is not empty
+// Flexible login rule
 export const loginIdentifierValidation: ValidationChain = body("identifier")
   .notEmpty()
   .withMessage("Email or Phone number is required to login");
 
-// ==========================================
-// 2. CORE EXECUTION MIDDLEWARES
-// ==========================================
+
+//CORE EXECUTION MIDDLEWARES
 
 export const validateInput = (
   req: Request, 
@@ -69,9 +65,8 @@ export const validateInput = (
 };
 
 /**
- * AUTOMATED HASHING ENGINE
- * Intercepts valid request bodies and single-hashes passwords before reaching your services
- */
+ * AUTOMATED HASHING 
+  */
 export const hashPasswordPayload = async (
   req: Request,
   res: Response,
@@ -85,15 +80,13 @@ export const hashPasswordPayload = async (
     }
     next();
   } catch (error: any) {
-    console.error("💥 Global Hash Processing Failure:", error.message);
+    console.error("Global Hash Processing Failure:", error.message);
     return res.status(500).json({ error: "Internal Server Error during security encryption." });
   }
 };
 
-// ==========================================
-// 3. BUNDLED ROUTE RULES
-// ==========================================
 
+//BUNDLED ROUTE RULES
 // For Manager / Admin Registration
 export const registerRules = [
   emailValidation,
@@ -105,7 +98,7 @@ export const registerRules = [
   hashPasswordPayload 
 ];
 
-// ✅ UPDATED STANDARD LOGIN BUNDLE: Uses dynamic loginIdentifierValidation to check for 'identifier' instead of strict 'email'
+//UPDATED STANDARD LOGIN BUNDLE: Uses dynamic loginIdentifierValidation to check for 'identifier(email/phone_number)'
 export const loginRules = [
   loginIdentifierValidation,
   passwordValidation,
@@ -123,7 +116,7 @@ export const passengerRegisterRules = [
   hashPasswordPayload 
 ];
 
-// For Flexible Authentication Login (Passenger-specific alias)
+// For Flexible Authentication Login 
 export const passengerLoginRules = [
   loginIdentifierValidation,
   passwordValidation,

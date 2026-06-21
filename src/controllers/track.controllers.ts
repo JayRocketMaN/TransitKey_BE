@@ -20,14 +20,14 @@ export const addRoute = async (req: Request, res: Response) => {
 
     if (!operatorId) return res.status(401).json({ message: "Unauthorized" });
     
-    // Updated validation matching your new NOT NULL table columns
+    // Route validation: Ensure required fields are present
     if (!route_name || !start_terminal || !end_terminal || fare === undefined) {
       return res.status(400).json({ 
         message: "Route name, start terminal, end terminal, and fare are required." 
       });
     }
 
-    console.log("🔍 Searching for company owned by User ID:", operatorId);
+    console.log(" Searching for company owned by User ID:", operatorId);
     const { data: park, error: parkError } = await RouteService.getParkByOperator(operatorId) as any;
     
     if (parkError || !park) {
@@ -42,7 +42,7 @@ export const addRoute = async (req: Request, res: Response) => {
       return res.status(400).json({ message: "End terminal cannot match the start terminal." });
     }
 
-    // Call service mapping all 7 parameters under the park context
+    // Call service mapping all parameters under the park context
     const { error: insertError } = await RouteService.createRoute(park.id, { 
       route_name, 
       start_terminal, 

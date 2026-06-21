@@ -13,7 +13,7 @@ export class NotificationController {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      // Fetch notifications sorted by newest first to match your Figma layout stack
+      // Fetch notifications sorted by newest first
       const { data: notifications, error } = await supabase
         .from("notifications")
         .select("*")
@@ -32,7 +32,7 @@ export class NotificationController {
   }
 
   /**
-   * Marks all notifications as read when they click "VIEW ALL NOTIFICATIONS" in your Figma UI
+   * Marks all notifications as read for the "VIEW ALL NOTIFICATIONS" button
    */
   static async markAllAsRead(req: Request, res: Response) {
     try {

@@ -1,6 +1,5 @@
 import { supabase } from "../config/supabase.js";
 
-// Strictly typed to match your database CHECK constraint rule exactly
 type TripStatus = "scheduled" | "in-progress" | "completed" | "cancelled";
 
 export interface TripInput {
@@ -16,8 +15,7 @@ export interface TripInput {
 export class TripService {
   /**
    * Handshake: Transition trip from 'scheduled' to 'in-progress' via RPC.
-   * FIXED: Passes raw decimal float attributes directly to the updated database stored procedure.
-   */
+  */
   static async startTrip(tripId: string, startLat: number, startLng: number) {
     const { data, error } = await supabase.rpc('start_trip_transaction', {
       p_trip_id: tripId,
@@ -31,14 +29,13 @@ export class TripService {
 
   /**
    * Creates/Schedules a new journey transit manifest
-   * FIXED: First parameter renamed to 'companyId' to align with your controller updates and table constraints.
    */
   static async createTrip(companyId: string, data: TripInput) {
     const { data: trip, error } = await supabase
       .from("trips")
       .insert([{
         driver_id: data.driver_id,
-        company_id: companyId, // Satisfies your fk_company rules natively
+        company_id: companyId, 
         bus_id: data.bus_id, 
         origin_name: data.origin_name,
         destination_name: data.destination_name,
@@ -68,7 +65,6 @@ export class TripService {
 
   /**
    * Get active company fleet trip dashboard manifests
-   * FIXED: Joined tables query updated from 'my_users' to 'driver_profiles' to match schema changes.
    */
   static async getActiveTripsByCompany(companyId: string) {
     const { data, error } = await supabase
@@ -89,7 +85,6 @@ export class TripService {
   }
 
   /**
-   * FIGMA FEATURE: Upcoming Trips Summary Dashboard Component
    * Fetches all confirmed or pending trip bookings assigned specifically to the logged-in passenger
    */
   static async getPassengerUpcomingSummary(userId: string) {
@@ -115,8 +110,7 @@ export class TripService {
       .order("created_at", { ascending: false });
 
     if (error) throw error;
-
-    // Formats and flattens the output structure to align exactly with your Figma UI list columns
+    
     return (data || []).map((b: any) => ({
       booking_id: b.id,
       seat_number: b.seat_number,
@@ -127,16 +121,15 @@ export class TripService {
   }
 
   /**
-   * FIGMA UI FEATURE: Handles the "Quick Route Search" Form (From -> To)
-   * Searches for static routes matching terminal names, and joins active live trip deployments
+   *Handles the "Quick Route Search" Form (From -> To)
    */
   static async searchLiveTripsByTerminals(startTerminal: string, endTerminal: string) {
     if (!startTerminal || !endTerminal) {
       throw new Error("Both start and end terminals are required to run a quick search.");
     }
 
-    // 1. Query the routes table using case-insensitive text matching (ilike)
-    // 2. Joins the 'trips' table to pull active, un-departed vehicles assigned to this route path
+    // Query the routes table 
+    //Joins the 'trips' table to pull active, un-departed vehicles assigned to this route path
     const { data, error } = await supabase
       .from("routes")
       .select(`
@@ -161,12 +154,12 @@ export class TripService {
       `)
       .ilike("start_terminal", `%${startTerminal.trim()}%`)
       .ilike("end_terminal", `%${endTerminal.trim()}%`)
-      .eq("trips.ride_status", "scheduled") // 🧠 Only pull buses that haven't left the station yet!
+      .eq("trips.ride_status", "scheduled") 
       .order("route_name", { ascending: true });
 
     if (error) throw error;
 
-    // Flatten the response payload structure to make it clean for your frontend team
+    // Flatten the response payload structure to make it cleaner to consume on the front-end
     return (data || []).map((route: any) => ({
       route_id: route.id,
       route_name: route.route_name,
@@ -179,9 +172,9 @@ export class TripService {
         trip_id: trip.id,
         bus_identifier: trip.bus_id,
         status: trip.ride_status,
-        price: route.fare, // Inherits pricing metrics from the core path
+        price: route.fare,
         seats_available: (trip.total_seats || 14) - (trip.occupied_seats || 0)
       }))
     }));
   }
-} // 🧠 Final closing brace containing all class declarations!
+} // 

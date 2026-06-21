@@ -23,7 +23,7 @@ export class VehicleService {
   }
 
   /**
-   * Validates if a plate number is already registered, with optional row exclusion for updates
+   * Validates if a plate number is already registered
    */
   static async checkDuplicatePlate(plateNumber: string, excludeId?: string) {
     let query = supabase
@@ -39,8 +39,7 @@ export class VehicleService {
   }
 
   /**
-   * Computes total registered assets within a specific park boundary
-   * FIXED: Returns count parameters structurally to align with controller destructuring
+   * Computes total registered assets(vehicles) within a specific park 
    */
   static async getVehicleCountInPark(parkId: string) {
     const { count, error } = await supabase

@@ -15,19 +15,19 @@ export class VehicleController {
 
       if (!plate_number) return res.status(400).json({ error: "plate_number is a required field." });
 
-      // 1. Get Park ID
+      //Get Park ID
       const { data: park, error: parkError } = await VehicleService.getParkByOperator(operatorId);
       if (parkError || !park) return res.status(404).json({ message: "No registered park found." });
 
-      // 2. Check Plate Duplication
+      //Check Plate Duplication
       const { data: duplicate } = await VehicleService.checkDuplicatePlate(plate_number);
       if (duplicate) return res.status(409).json({ message: "Plate number already exists." });
 
-      // 3. Compute Serialized BUS ID
+      //Compute Serialized BUS ID
       const { count } = await VehicleService.getVehicleCountInPark(park.id);
       const busId = `BUS-${(count || 0) + 1}`;
 
-      // 4. Insert into inventory system
+      //Insert into inventory system
       const { error: insertError } = await VehicleService.createVehicle({
         park_id: park.id,
         park_operator_id: operatorId,

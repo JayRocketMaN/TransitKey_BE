@@ -5,7 +5,6 @@ import { authorize } from '../middleware/auth.middleware.js';
 const router = Router();
 
 //Start trip and live tracking
-// Add parentheses and an array of allowed roles
 router.post('/start', authorize(['driver']), locationController.handleStartTrip);
 
 

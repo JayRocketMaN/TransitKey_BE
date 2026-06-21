@@ -19,22 +19,22 @@ const io = new Server(httpServer, {
 // Inject io into Express app to use in routes: req.app.get('socketio')
 app.set('socketio', io);
 
-// --- SOCKET LOGIC ---
+//SOCKET LOGIC
 io.on("connection", (socket: Socket) => {
-  console.log("✅ Socket Connected:", socket.id);
+  console.log("Socket Connected:", socket.id);
 
   socket.on("join-trip", (tripId: string) => {
     socket.join(tripId);
-    console.log(`👥 Client ${socket.id} joined Trip Room: ${tripId}`);
+    console.log(`Client ${socket.id} joined Trip Room: ${tripId}`);
   });
 
   socket.on("disconnect", () => {
-    console.log("❌ Client disconnected:", socket.id);
+    console.log("Client disconnected:", socket.id);
   });
 });
 
 const PORT = process.env.PORT || 3000;
 
 httpServer.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log(`Server running on http://localhost:${PORT}`);
 });

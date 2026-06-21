@@ -1,9 +1,7 @@
 import { Request, Response } from "express";
 import { AssignmentService } from "../services/assign.services.js";
 
-/**
- * Initial assignment of a driver to a vehicle
- */
+
 export const assignDriver = async (req: Request, res: Response) => {
   try {
     const { vehicle_id, driver_id } = req.body;
@@ -12,15 +10,14 @@ export const assignDriver = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "vehicle_id and driver_id are required fields." });
     }
 
-    // FIXED: Adjusted to 'admin' to match your database user profile setup
-    const currentUserRole = req.user?.user_role || (req.user as any)?.role;
+     const currentUserRole = req.user?.user_role || (req.user as any)?.role;
     if (currentUserRole !== "admin") {
       return res.status(403).json({ message: "Access denied. Managers/Admins only." });
     }
 
-    console.log(`📡 Checking busy status for driver: ${driver_id}`);
+    console.log(`Checking busy status for driver: ${driver_id}`);
     
-    // 1. Check if driver is already on another vehicle
+    //Check if driver is already on another vehicle
     const resultCheck = await AssignmentService.checkDriverBusy(driver_id);
     if (resultCheck?.error) return res.status(500).json({ error: resultCheck.error.message });
     
@@ -30,9 +27,9 @@ export const assignDriver = async (req: Request, res: Response) => {
       });
     }
 
-    console.log(`📡 Proceeding with vehicle injection: ${vehicle_id}`);
+    console.log(`Proceeding with vehicle injection: ${vehicle_id}`);
 
-    // 2. Perform initial assignment
+    //initial assignment
     const resultAssign = await AssignmentService.assignDriverToVehicle(vehicle_id, driver_id);
     if (resultAssign?.error) return res.status(500).json({ error: resultAssign.error.message });
 
@@ -41,13 +38,13 @@ export const assignDriver = async (req: Request, res: Response) => {
       vehicle: resultAssign?.data || null 
     });
   } catch (error: any) {
-    console.error("💥 Assignment Controller Failure:", error.message);
+    console.error("Assignment Controller Failure:", error.message);
     return res.status(500).json({ error: error.message || "Internal Server Error" });
   }
 };
 
 /**
- * Handles Driver Rotation (Reassignment)
+ *Driver Rotation (Reassignment)
  */
 export const updateAssignment = async (req: Request, res: Response) => {
   try {
@@ -62,7 +59,7 @@ export const updateAssignment = async (req: Request, res: Response) => {
       return res.status(403).json({ message: "Access denied. Managers/Admins only." });
     }
 
-    // Use the rotation service to release from old and assign to new vehicle
+    //release from old and assign to new vehicle
     const resultRotate = await AssignmentService.rotateDriver(vehicle_id, new_driver_id);
     if (resultRotate?.error) return res.status(500).json({ error: resultRotate.error.message });
 
@@ -85,7 +82,7 @@ export const getAssignments = async (req: Request, res: Response) => {
 
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
-    // FIXED: Adjusted check strings to use 'admin'
+    // check if admin
     if (userRole === "admin") {
       const resultFleet = await AssignmentService.getOperatorFleet();
       if (resultFleet?.error) return res.status(500).json({ error: resultFleet.error.message });
