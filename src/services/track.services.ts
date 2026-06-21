@@ -1,19 +1,18 @@
 import { supabase } from "../config/supabase.js";
 
-// Updated to completely reflect your 7 new structural database fields
 export interface RouteInput {
-  route_name: string;          // 1. Route Name
-  start_terminal: string;      // 2. Start Terminal
-  end_terminal: string;        // 3. End Terminal
-  distance_km?: number | null; // 4. Distance in km
-  duration_minutes?: number | null; // 5. Duration in minutes
-  fare: number;                // 6. Fare Price
-  stops?: string[];            // 7. Stops (Stored as text array string[])
+  route_name: string;          
+  start_terminal: string;      
+  end_terminal: string;        
+  distance_km?: number | null; 
+  duration_minutes?: number | null; 
+  fare: number;               
+  stops?: string[];         
 }
 
 export class RouteService {
   /**
-   * FIXED: Points to 'companies' table and 'owner_id' column
+   *Points to 'companies' table and 'owner_id' column
    */
   static async getParkByOperator(operatorId: string) {
     return await supabase
@@ -24,7 +23,7 @@ export class RouteService {
   }
 
   /**
-   * Creates a route linked to the company (park_id) mapping all 7 columns
+   * Creates a route linked to the company (park_id) 
    */
   static async createRoute(parkId: string, data: RouteInput) {
     return await supabase
@@ -38,7 +37,7 @@ export class RouteService {
           distance_km: data.distance_km ?? null,
           duration_minutes: data.duration_minutes ?? null,
           fare: data.fare,
-          stops: data.stops ?? [] // Directly accepts array string data structure
+          stops: data.stops ?? [] 
         },
       ])
       .select()
@@ -53,7 +52,7 @@ export class RouteService {
       .from("routes")
       .select("*")
       .eq("park_id", parkId)
-      .order("route_name", { ascending: true }); // Optimized to use your new index
+      .order("route_name", { ascending: true }); 
   }
 
   /**
@@ -70,7 +69,7 @@ export class RouteService {
   }
 
   /**
-   * Public: Fetches all routes cross-joining the company profile contexts
+   *Fetches all routes cross-joining the company profile contexts
    */
   static async fetchAllRoutesWithParks() {
     return await supabase

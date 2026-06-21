@@ -17,7 +17,7 @@ export class ReferenceService {
         .select("code")
         .single();
 
-      // Always return a consistent object for your controller
+  
       return { data, error };
     } catch (err: any) {
       return { data: null, error: err };

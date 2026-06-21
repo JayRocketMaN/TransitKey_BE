@@ -1,18 +1,19 @@
 import { Router } from "express";
 import { BookingController } from "../controllers/booking.controllers.js";
-import { authorize } from "../middleware/auth.middleware.js"; // Adjust based on your auth middleware path
+import { authorize } from "../middleware/auth.middleware.js"; 
 
 const router = Router();
 
-// GET /api/bookings/:tripId/seats -> Fetch available seat numbers
+//Fetch available seat numbers
 router.get("/:tripId/seats", BookingController.getSeatLayout);
 
-// POST /api/bookings/book -> Book a selected seat number
+//Book a selected seat number
 router.post("/book", authorize(["passenger", "admin"]), BookingController.bookSeat);
 
+//confirm a booking
 router.post("/create-ticket", authorize(["admin"]), BookingController.verifyPayment);
 
-// POST /api/bookings/cancel -> Cancel an un-departed booking
+//Cancel a booking
 router.post("/cancel", authorize(["passenger", "admin"]), BookingController.cancelBooking);
 
 export default router;

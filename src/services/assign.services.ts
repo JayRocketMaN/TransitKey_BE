@@ -11,7 +11,7 @@ export class AssignmentService {
       .eq("current_driver_id", driverId)
       .maybeSingle();
 
-    return { data, error }; // Returns object matching the controller checks
+    return { data, error }; 
   }
 
   /**
@@ -28,11 +28,11 @@ export class AssignmentService {
       .select()
       .maybeSingle();
 
-    return { data, error }; // Returns object matching the controller checks
+    return { data, error }; 
   }
 
   /**
-   * Forcefully removes a driver from any vehicle they are currently assigned to
+   *Remove a driver from any vehicle they are currently assigned to
    */
   static async unassignDriverFromAnyVehicle(driverId: string) {
     return await supabase

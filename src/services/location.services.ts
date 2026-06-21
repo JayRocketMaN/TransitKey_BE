@@ -3,8 +3,7 @@ import { LocationUpdateBody } from '../types/location.interface.js';
 
 export class LocationService {
   /**
-   * 1. Update Live GPS Pin — Bulletproof PostGIS Typecast Integration
-   * FIXED: Uses standard spatial EWKT format parsing strings to guarantee 100% database compatibility
+   *Update Live GPS Pin 
    */
   static async updateTripLocation(data: LocationUpdateBody) {
     const { tripId, lat, lng } = data;
@@ -27,9 +26,8 @@ export class LocationService {
   }
 
   /**
-   * 2. Batch Sync Offline Data — Corrected geometry types for array batch bindings
-   * FIXED: Swapped out nested JSON point shapes for robust native EWKT mapping strings
-   */
+   *Batch Sync Offline Data —(using robust native EWKT mapping strings)
+ */
   static async syncBatchLocations(batchData: { tripId: string; lat: number; lng: number; timestamp: string }[]) {
     const historyEntries = batchData.map(point => ({
       trip_id: point.tripId,
@@ -54,7 +52,7 @@ export class LocationService {
   }
 
   /**
-   * 3. Spatial Searching RPC — Handled by PostGIS Stored Function
+   *Spatial Searching RPC — Handled by PostGIS Stored Function
    */
   static async searchBusesNearby(lat: number, lng: number, radiusMeters: number = 5000) {
     const { data, error } = await supabase.rpc('search_available_buses', {
@@ -68,9 +66,7 @@ export class LocationService {
   }  
   
   /**
-   * 4. PRODUCTION LIVE LOCATION FETCH
-   * FIXED: Bypasses library definition constraints by type-casting the destructor 
-   * output parameter directly, clearing all 7 active VS Code linter warnings
+   *PRODUCTION LIVE LOCATION FETCH
    */
   static async getLatestTripLocation(tripId: string) {
     // Let Supabase fetch the row natively without restrictive internal generic checks
@@ -98,8 +94,7 @@ export class LocationService {
 
 
   /**
-   * 5. FIXED: Fetch Manager Fleet View with PostGIS Conversion
-   * This ensures your frontend map dashboard does not get raw binary strings!
+   *Fetch Manager Fleet View with PostGIS Conversion
    */
   static async getManagerFleetView(companyId: string) {
     const { data, error } = await supabase
@@ -121,7 +116,7 @@ export class LocationService {
 
     if (error) throw error;
 
-    // Standardize mapping parameters into clean float coordinates for Leaflet/Google Maps UI elements
+    // Standardize mapping parameters into clean float coordinates for Leaflet UI elements
     return data?.map((trip: any) => {
       const geoData = trip.vehicle_locations?.location as any;
       

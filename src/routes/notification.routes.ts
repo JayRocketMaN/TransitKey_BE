@@ -4,10 +4,10 @@ import { authorize } from "../middleware/auth.middleware.js";
 
 const router = Router();
 
-// GET /api/notifications -> Fetches alerts list for dashboard component
-router.get("/", authorize(["passenger", "admin", "driver"]), NotificationController.getMyNotifications);
+//Fetches alerts list for dashboard component
+router.get("/", authorize(["passenger", "admin", "driver", "operator"]), NotificationController.getMyNotifications);
 
-// POST /api/notifications/read-all -> Clears unread counts
-router.post("/read-all", authorize(["passenger", "admin", "driver"]), NotificationController.markAllAsRead);
+
+router.post("/read-all", authorize(["passenger", "admin", "driver", "operator"]), NotificationController.markAllAsRead);
 
 export default router;

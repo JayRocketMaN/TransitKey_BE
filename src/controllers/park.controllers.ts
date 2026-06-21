@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { ParkService } from "../services/park.services.js";
 
 /**
- * 1. Register a new Operator and their Park Company (Unified Interface Form)
+ *Register a new Operator and their Park Company (Unified Interface Form)
  */
 export const parkRegister = async (req: Request, res: Response) => {
   try {
@@ -15,12 +15,12 @@ export const parkRegister = async (req: Request, res: Response) => {
 
     const existingPark = await ParkService.findParkByName(company_name);
     
-    // FIXED LINT ALERT: Evaluated as a direct object lookup mapping or null
+    //Evaluated as a direct object lookup mapping or null
     if (existingPark && existingPark.id) {
       return res.status(409).json({ error: "This company name is already registered in our system." });
     }
 
-    // ALIGNED: Passes password straight through because upstream middleware executes hashing parameters
+    //Passes password straight through because upstream middleware executes hashing parameters
     const onboardingResult = await ParkService.registerOperatorWithCompany({
       company_name,
       phone_number,
@@ -34,7 +34,7 @@ export const parkRegister = async (req: Request, res: Response) => {
     });
 
   } catch (error: any) {
-    console.error("💥 Combined Operator Registration Failure:", error.message);
+    console.error("Combined Operator Registration Failure:", error.message);
     if (error.message?.includes("my_users_email_key") || error.code === "23505") {
       return res.status(409).json({ error: "An account with this email address already exists." });
     }
@@ -43,7 +43,7 @@ export const parkRegister = async (req: Request, res: Response) => {
 };
 
 /**
- * 2. RESTORED: Update existing Park settings
+ *Update existing Park settings
  */
 export const updatePark = async (req: Request, res: Response) => {
   try {
@@ -57,13 +57,13 @@ export const updatePark = async (req: Request, res: Response) => {
       data: updatedPark 
     });
   } catch (error: any) {
-    console.error("💥 Park Update Failure:", error.message);
+    console.error("Park Update Failure:", error.message);
     return res.status(500).json({ error: error.message || "Internal Server Error" });
   }
 };
 
 /**
- * 3. RESTORED: Fetch comprehensive Park configuration profiles
+ *Fetch comprehensive Park configuration profiles
  */
 export const getParkDetails = async (req: Request, res: Response) => {
   try {
@@ -82,7 +82,7 @@ export const getParkDetails = async (req: Request, res: Response) => {
       } 
     });
   } catch (error: any) {
-    console.error("💥 Park Details Retrieval Failure:", error.message);
+    console.error("Park Details Retrieval Failure:", error.message);
     return res.status(500).json({ error: error.message || "Internal Server Error" });
   }
 };

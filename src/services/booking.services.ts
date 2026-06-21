@@ -3,7 +3,7 @@ import { supabase } from "../config/supabase.js";
 export class BookingService {
   /**
    * AUTOMATED ALERTS ENGINE
-   * Inserts notification cards directly into the database for the frontend to pull
+   * Inserts notification cards directly into the database
    */
   static async triggerNotification(userId: string, type: "created" | "expired" | "confirmed", details: any) {
     try {
@@ -14,14 +14,14 @@ export class BookingService {
         title = "Seat Hold Active";
         message = `Your 30-minute hold on Seat #${details.seat} is active. Please complete your offline payment before it lapses.`;
       } else if (type === "confirmed") {
-        title = "Payment Successful"; // 🧠 Matches your Figma UI card text exactly!
+        title = "Payment Successful";
         message = `Payment verified offline. Seat #${details.seat} is permanently confirmed for your trip.`;
       } else {
         title = "Seat Hold Expired";
         message = `Your 30-minute temporary hold window lapsed for Seat #${details.seat}. The seat has been returned to the public pool.`;
       }
 
-      // 🧠 Save the notification row so the passenger's dashboard can pull it via Method A
+      //Save the notification row so the passenger's dashboard can pull it
       await supabase.from("notifications").insert([
         {
           user_id: userId,
@@ -31,9 +31,9 @@ export class BookingService {
         }
       ]);
 
-      console.log(`📡 [SYSTEM LOG: NOTIFICATION RECORDED] Type: ${type.toUpperCase()} | User: ${userId}`);
+      console.log(`[SYSTEM LOG: NOTIFICATION RECORDED] Type: ${type.toUpperCase()} | User: ${userId}`);
     } catch (err: any) {
-      console.error("💥 Failed to write system notification card:", err.message);
+      console.error("Failed to write system notification card:", err.message);
     }
   }
 
@@ -53,20 +53,20 @@ export class BookingService {
 
     if (expiredBookings && expiredBookings.length > 0) {
       for (const booking of expiredBookings) {
-        // 1. Transition status flag
+        //Transition status flag
         await supabase
           .from("bookings")
           .update({ booking_status: "expired" })
           .eq("id", booking.id);
 
-        // 2. Automatically dispatch automated expiration log
+        //Automatically dispatch automated expiration log
         await this.triggerNotification(booking.user_id, "expired", {
           seat: booking.seat_number,
           tripId
         });
       }
 
-      // 3. Decrement occupied metrics counter
+      //Decrement occupied metrics counter
       const { data: trip } = await supabase
         .from("trips")
         .select("occupied_seats")
@@ -81,7 +81,7 @@ export class BookingService {
   }
 
   /**
-   * Looks up a scheduled trip directly using its UUID identifier
+   * Looks up a scheduled trip directly using its UUID 
    */
   static async findAvailableTrip(tripId: string) {
     return await supabase
@@ -123,7 +123,7 @@ export class BookingService {
   }
 
   /**
-   * Admin / Operator Action: Confirms offline payment received at park/terminal
+   *For Admin to confirm offline payment received at park/terminal
    */
   static async confirmOfflinePayment(bookingId: string) {
     const { data: booking, error: fetchErr } = await supabase
@@ -184,7 +184,7 @@ export class BookingService {
   }
 
   /**
-   * Sweeps expired holds first, then produces a fresh layout mapping
+   * Sweeps expired holds first, then produces a fresh availability snapshot for a given trip
    */
   static async getAvailableSeats(tripId: string) {
     await this.releaseExpiredHolds(tripId);

@@ -12,5 +12,5 @@ export interface GeoJsonPoint {
 export interface TripWithLocation {
   id: string;
   occupied_seats: number;
-  vehicle_locations: GeoJsonPoint; // This matches the Supabase output
+  vehicle_locations: GeoJsonPoint;
 }

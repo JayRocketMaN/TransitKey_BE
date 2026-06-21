@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { AuthService } from '../services/auth.services.js'; 
 
 /**
- * Registers a new user (Passenger / Operator fallback)
+ * Registers a new user (Passenger / Operator)
  */
 export const register = async (req: Request, res: Response) => {
   try {
@@ -14,18 +14,17 @@ export const register = async (req: Request, res: Response) => {
 };
 
 /**
- * Authenticates user via flexible multi-channel identifier and sets HttpOnly cookie
+ * Authenticate user via flexible multi-channel identifier and set HttpOnly cookie
  */
 export const login = async (req: Request, res: Response) => {
   try {
-    // FIXED: Changed destructuring from 'email' to 'identifier' to match your flexible validation settings
     const { identifier, password } = req.body;
     
-    // Aligned to pass your flexible email or phone number string to your service layer
+    // Allow for flexible email or phone number auth
     const result = await AuthService.validateUser(identifier, password);
 
-    // Diagnostic Log: Verify what your service layer is actually outputting
-    console.log("🔒 [AuthController.login] Authenticated User Profile:", result.user);
+    // Diagnostic Log: Verify output from services.ts
+    console.log("[AuthController.login] Authenticated User Profile:", result.user);
 
     res.cookie('accessToken', result.token, AuthService.getCookieOptions());
 
@@ -36,7 +35,7 @@ export const login = async (req: Request, res: Response) => {
 };
 
 /**
- * For Drivers: Initial activation via reference code
+ *Initial activation for drivers via reference code
  */
 export const activateDriver = async (req: Request, res: Response) => {
   try {

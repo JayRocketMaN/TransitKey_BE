@@ -5,7 +5,7 @@ import { CustomJwtPayload } from "../types/express.js";
 export const authorize = (allowedRoles: string[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
     try {
-      // DEBUG LOGS - Check your terminal!
+      // DEBUG LOGS 
       console.log("--- Auth Middleware Debug ---");
       console.log("All Cookies:", req.cookies); 
       console.log("Access Token:", req.cookies?.accessToken);
@@ -18,20 +18,20 @@ export const authorize = (allowedRoles: string[]) => {
         return res.status(401).json({ message: "Unauthorized - No token provided" });
       }
 
-      // 2. Verify the token securely
+      //Verify the token securely
       const decoded = jwt.verify(accessToken, process.env.JWT_SECRET!) as CustomJwtPayload;
       
-      console.log("Decoded Token Payload:", decoded); // Updated log to see everything inside the cookie
+      console.log("Decoded Token Payload:", decoded); 
       console.log("Decoded User Role:", decoded.user_role);
       console.log("Allowed Roles:", allowedRoles);
 
-      // 3. Role-based check
+      //Role-based check
       if (!allowedRoles.includes(decoded.user_role)) {
         console.log("Error: Role mismatch. Access Denied.");
         return res.status(403).json({ message: "Access Denied - Insufficient permissions" });
       }
 
-      // 4. Normalize company fields to guarantee req.user.company_id exists
+      //Normalize company fields to guarantee req.user.company_id exists
       req.user = {
         ...decoded,
         company_id: decoded.company_id || (decoded as any).companyId

@@ -5,7 +5,7 @@ import { LocationUpdateBody } from '../types/location.interface.js';
 import { supabase } from '../config/supabase.js'; // Imported to execute the raw row dump
 
 /**
- * 1. START TRIP (The Handshake)
+ *START TRIP (The Handshake)
  */
 export const handleStartTrip = async (req: Request, res: Response) => {
   try {
@@ -27,7 +27,7 @@ export const handleStartTrip = async (req: Request, res: Response) => {
 };
 
 /**
- * 2. REGULAR GPS PING UPDATE
+ *REGULAR GPS PING UPDATE
  */
 export const handleLocationUpdate = async (req: Request, res: Response) => {
   try {
@@ -56,7 +56,7 @@ export const handleLocationUpdate = async (req: Request, res: Response) => {
 };
 
 /**
- * 3. BATCH SYNC (Offline Breadcrumbs Handler)
+ *BATCH SYNC (Offline Breadcrumbs Handler)
  */
 export const handleBatchSync = async (req: Request, res: Response) => {
   try {
@@ -75,8 +75,8 @@ export const handleBatchSync = async (req: Request, res: Response) => {
 };
 
 /**
- * 4. PRODUCTION LIVE LOCATION FETCH
- * Serves perfectly decoded coordinate objects straight to your Vercel frontend maps
+ *PRODUCTION LIVE LOCATION FETCH
+ * Serves perfectly decoded coordinate objects straight to your frontend mapUI
  */
 export const getLiveLocation = async (req: Request, res: Response) => {
   try {
@@ -103,7 +103,7 @@ export const getLiveLocation = async (req: Request, res: Response) => {
 };
 
 /**
- * 5. NEARBY BUSES (Spatial Radius Lookup Search)
+ *NEARBY BUSES (Spatial Radius Lookup Search)
  */
 export const getNearbyBuses = async (req: Request, res: Response) => {
   try {
