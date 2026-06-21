@@ -6,7 +6,7 @@ interface FleetFilters {
   destination?: string;
 }
 
-export const getGlobalFleetOverview = async (filters: FleetFilters) => {
+export const getFleetOverview = async (filters: FleetFilters) => {
   let query = supabase
     .from("vehicles")
     .select(`
@@ -26,17 +26,17 @@ export const getGlobalFleetOverview = async (filters: FleetFilters) => {
     `)
     .eq("status", "active"); // Only show buses ready to work
 
-  // 1. Filter by company name if provided
+  //Filter by company name if provided
   if (filters.companyName) {
     query = query.eq("companies.company_name", filters.companyName); 
   }
 
-  // 2. Filter by origin location (e.g. matching the starting terminal or state)
+  //Filter by origin location 
   if (filters.origin) {
     query = query.ilike("routes.start_terminal", `%${filters.origin}%`);
   }
   
-  // 3. Filter by destination (matching the route's end terminal)
+  //Filter by destination 
   if (filters.destination) {
     query = query.ilike("routes.end_terminal", `%${filters.destination}%`);
   }
