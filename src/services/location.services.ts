@@ -3,7 +3,7 @@ import { LocationUpdateBody } from '../types/location.interface.js';
 
 export class LocationService {
   /**
-   *Update Live GPS Pin 
+   * Update Live GPS Pin 
    */
   static async updateTripLocation(data: LocationUpdateBody) {
     const { tripId, lat, lng } = data;
@@ -26,8 +26,8 @@ export class LocationService {
   }
 
   /**
-   *Batch Sync Offline Data —(using robust native EWKT mapping strings)
- */
+   * Batch Sync Offline Data — (using robust native EWKT mapping strings)
+   */
   static async syncBatchLocations(batchData: { tripId: string; lat: number; lng: number; timestamp: string }[]) {
     const historyEntries = batchData.map(point => ({
       trip_id: point.tripId,
@@ -52,7 +52,7 @@ export class LocationService {
   }
 
   /**
-   *Spatial Searching RPC — Handled by PostGIS Stored Function
+   * Spatial Searching RPC — Handled by PostGIS Stored Function
    */
   static async searchBusesNearby(lat: number, lng: number, radiusMeters: number = 5000) {
     const { data, error } = await supabase.rpc('search_available_buses', {
@@ -66,7 +66,7 @@ export class LocationService {
   }  
   
   /**
-   *PRODUCTION LIVE LOCATION FETCH
+   * PRODUCTION LIVE LOCATION FETCH
    */
   static async getLatestTripLocation(tripId: string) {
     // Let Supabase fetch the row natively without restrictive internal generic checks
@@ -92,9 +92,9 @@ export class LocationService {
     };
   }
 
-
   /**
-   *Fetch Manager Fleet View with PostGIS Conversion
+   * Fetch Manager Fleet View with PostGIS Conversion
+   * Fixed to prevent undefined array coordinate crashes from the DB layer
    */
   static async getManagerFleetView(companyId: string) {
     const { data, error } = await supabase
@@ -102,8 +102,10 @@ export class LocationService {
       .select(`
         id,
         bus_id,
-        ride_status,
+        origin_name,
+        destination_name,
         price,
+        ride_status,
         occupied_seats,
         total_seats,
         driver_profiles:driver_id (full_name),
@@ -116,20 +118,36 @@ export class LocationService {
 
     if (error) throw error;
 
-    // Standardize mapping parameters into clean float coordinates for Leaflet UI elements
+    // Standardize mapping parameters into clean float coordinates safely
     return data?.map((trip: any) => {
       const geoData = trip.vehicle_locations?.location as any;
       
       let longitude = null;
       let latitude = null;
 
-      if (geoData && Array.isArray(geoData.coordinates)) {
+      // Safe evaluation parser fallback string extraction handles hex/WKT shapes safely
+      if (geoData && typeof geoData === 'string') {
+        const matches = geoData.match(/POINT\(([^)]+)\)/);
+        if (matches && matches[1]) {
+          const parts = matches[1].split(' ');
+          longitude = parseFloat(parts[0]);
+          latitude = parseFloat(parts[1]);
+        }
+      } else if (geoData && Array.isArray(geoData.coordinates)) {
         longitude = geoData.coordinates[0];
         latitude = geoData.coordinates[1];
       }
 
       return {
-        ...trip,
+        id: trip.id,
+        bus_id: trip.bus_id,
+        origin: trip.origin_name,
+        destination: trip.destination_name,
+        ride_status: trip.ride_status,
+        price: trip.price,
+        seats_summary: `${trip.occupied_seats || 0}/${trip.total_seats || 30}`,
+        driver_name: trip.driver_profiles ? trip.driver_profiles.full_name : "Unassigned Driver",
+        updated_at: trip.vehicle_locations?.updated_at || null,
         coordinates: longitude !== null && latitude !== null ? {
           lat: latitude, 
           lng: longitude  

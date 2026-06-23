@@ -5,11 +5,12 @@ export interface OperatorCompanyRegistrationInput {
   phone_number: string;      
   email: string;             
   password_hash: string;     
+  cac_registration_number: string; // Added field based on the updated Figma design
 }
 
 export class ParkService {
   /**
-   *Check if a company name is already registered
+   * Check if a company name is already registered
    */
   static async findParkByName(name: string) {
     const { data, error } = await supabase
@@ -23,7 +24,7 @@ export class ParkService {
   }
 
   /**
-   *Registers Operator AND creates Company Park profile atomically
+   * Registers Operator AND creates Company Park profile atomically
    */
   static async registerOperatorWithCompany(input: OperatorCompanyRegistrationInput) {
     const { data: userRow, error: userError } = await supabase
@@ -44,28 +45,30 @@ export class ParkService {
 
     console.log("User created successfully with ID:", userRow.id, ". Proceeding to create company profile...");
 
-    //Instantly initialize the Company profile, setting the new user's ID as the 'owner_id'
+    // Instantly initialize the Company profile, setting the new user's ID as the 'owner_id'
+    // Now saves the 'cac_registration_number' into the database
     const { data: companyRow, error: companyError } = await supabase
       .from("companies")
       .insert([{
         owner_id: userRow.id,           
         name: input.company_name.trim(), 
         address: `Pending Address Setup | Contact: ${input.phone_number.trim()}`, 
-        park_location: null             
+        park_location: null,
+        cac_registration_number: input.cac_registration_number.trim() // Injected field here
       }])
       .select()
       .single();
 
     if (companyError) {
       console.error("Company Table Insertion Crash:", companyError.message);
-      //Clear out the unlinked user row to avoid leaving ghost data
+      // Clear out the unlinked user row to avoid leaving ghost data
       await supabase.from("my_users").delete().eq("id", userRow.id);
       throw companyError;
     }
 
     console.log("Company profile created successfully with ID:", companyRow.id, ". Performing final link step...");
 
-    //Update the user row to store its own company_id reference for seamless authentication sessions
+    // Update the user row to store its own company_id reference for seamless authentication sessions
     const { error: linkError } = await supabase
       .from("my_users")
       .update({ 
@@ -135,6 +138,7 @@ export class ParkService {
     const mappedData: any = {};
     if (updateData.park_name) mappedData.name = updateData.park_name;
     if (updateData.park_location) mappedData.address = updateData.park_location;
+    if (updateData.cac_registration_number) mappedData.cac_registration_number = updateData.cac_registration_number;
 
     const { data, error } = await supabase
       .from("companies")
@@ -148,7 +152,7 @@ export class ParkService {
   }
 
   /**
-   *Utility Fetcher
+   * Utility Fetcher
    */
   static async getParkByOperator(operatorId: string) {
     const { data, error } = await supabase

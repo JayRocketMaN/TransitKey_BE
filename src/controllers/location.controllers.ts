@@ -2,10 +2,11 @@ import { Request, Response } from 'express';
 import { LocationService } from '../services/location.services.js';
 import { TripService } from '../services/trip.services.js';
 import { LocationUpdateBody } from '../types/location.interface.js';
-import { supabase } from '../config/supabase.js'; // Imported to execute the raw row dump
+import { supabase } from '../config/supabase.js';
 
 /**
- *START TRIP (The Handshake)
+ * START TRIP (The Handshake)
+ * Re-mapped to update trip state natively and trigger database alerts
  */
 export const handleStartTrip = async (req: Request, res: Response) => {
   try {
@@ -15,11 +16,15 @@ export const handleStartTrip = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'tripId, lat, and lng are required to start trip.' });
     }
 
+    // 1. Execute the RPC Transaction to save geospatial starting points
     await TripService.startTrip(tripId, lat, lng);
+
+    // 2. Advance the operational status to update the Dashboard Grid instantly
+    await TripService.updateTripStatus(tripId, 'in-progress');
 
     return res.status(200).json({ 
       status: 'success', 
-      message: 'Trip started successfully. Live tracking active.' 
+      message: 'Trip started successfully. Dashboard and tracking views activated.' 
     });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
@@ -27,7 +32,8 @@ export const handleStartTrip = async (req: Request, res: Response) => {
 };
 
 /**
- *REGULAR GPS PING UPDATE
+ * REGULAR GPS PING UPDATE
+ * Enhanced to handle real-time dispatch alerts on status updates
  */
 export const handleLocationUpdate = async (req: Request, res: Response) => {
   try {
@@ -40,15 +46,35 @@ export const handleLocationUpdate = async (req: Request, res: Response) => {
     // Sync live marker changes inside PostGIS layout
     await LocationService.updateTripLocation({ tripId, lat, lng });
 
-    // Transmit coordinates over Socket.io pipeline channel room
+    // Fetch parent trip context to broadcast plate numbers to the Live Map view
+    const { data: tripContext } = await supabase
+      .from("trips")
+      .select("bus_id, company_id, ride_status")
+      .eq("id", tripId)
+      .maybeSingle();
+
+    // Transmit structural telemetry data downstream to sockets
     const io = req.app.get('socketio'); 
     if (io) {
-      io.to(tripId).emit('location-update', { tripId, lat, lng }); 
+      const livePayload = {
+        tripId,
+        plate_number: tripContext?.bus_id || "Fleet Vehicle",
+        ride_status: tripContext?.ride_status || "in-progress",
+        lat,
+        lng,
+        timestamp: new Date().toISOString()
+      };
+      
+      // Broadcast globally to update map tracks and targeted company channels
+      io.to(tripId).emit('location-update', livePayload); 
+      if (tripContext?.company_id) {
+        io.to(`company-${tripContext.company_id}`).emit('fleet-map-sync', livePayload);
+      }
     }
 
     return res.status(200).json({ 
       status: 'success', 
-      message: 'Location synchronized and broadcasted.' 
+      message: 'Location synchronized and broadcasted to live workspace interfaces.' 
     });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
@@ -56,7 +82,7 @@ export const handleLocationUpdate = async (req: Request, res: Response) => {
 };
 
 /**
- *BATCH SYNC (Offline Breadcrumbs Handler)
+ * BATCH SYNC (Offline Breadcrumbs Handler)
  */
 export const handleBatchSync = async (req: Request, res: Response) => {
   try {
@@ -68,14 +94,14 @@ export const handleBatchSync = async (req: Request, res: Response) => {
 
     await LocationService.syncBatchLocations(batch);
 
-    return res.status(200).json({ status: 'success', message: `Synced ${batch.length} points` });
+    return res.status(200).json({ status: 'success', message: `Synced ${batch.length} tracking points` });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
 };
 
 /**
- *PRODUCTION LIVE LOCATION FETCH
+ * PRODUCTION LIVE LOCATION FETCH
  * Serves perfectly decoded coordinate objects straight to your frontend mapUI
  */
 export const getLiveLocation = async (req: Request, res: Response) => {
@@ -90,7 +116,7 @@ export const getLiveLocation = async (req: Request, res: Response) => {
     const location = await LocationService.getLatestTripLocation(tripId as string);
 
     if (!location) {
-      return res.status(404).json({ error: 'No location data found for this trip.' });
+      return res.status(404).json({ error: 'No location tracking data found for this trip profile.' });
     }
 
     return res.status(200).json({
@@ -103,7 +129,7 @@ export const getLiveLocation = async (req: Request, res: Response) => {
 };
 
 /**
- *NEARBY BUSES (Spatial Radius Lookup Search)
+ * NEARBY BUSES (Spatial Radius Lookup Search)
  */
 export const getNearbyBuses = async (req: Request, res: Response) => {
   try {

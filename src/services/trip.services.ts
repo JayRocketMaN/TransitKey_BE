@@ -15,7 +15,7 @@ export interface TripInput {
 export class TripService {
   /**
    * Handshake: Transition trip from 'scheduled' to 'in-progress' via RPC.
-  */
+   */
   static async startTrip(tripId: string, startLat: number, startLng: number) {
     const { data, error } = await supabase.rpc('start_trip_transaction', {
       p_trip_id: tripId,
@@ -51,11 +51,22 @@ export class TripService {
 
   /**
    * Updates an ongoing trip status layout
+   * Refactored to dynamically record timestamps and match your notification trigger requirements.
    */
   static async updateTripStatus(tripId: string, status: TripStatus) {
+    const updatePayload: Record<string, any> = { 
+      ride_status: status,
+      updated_at: new Date().toISOString()
+    };
+
+    // Safely capture vehicle dispatch timestamps for live map views
+    if (status === "in-progress") {
+      updatePayload.started_at = new Date().toISOString();
+    }
+
     const { data, error } = await supabase
       .from("trips")
-      .update({ ride_status: status })
+      .update(updatePayload)
       .eq("id", tripId)
       .select()
       .maybeSingle();
@@ -73,8 +84,7 @@ export class TripService {
         *,
         driver_profiles:driver_id (
           full_name,
-          phone_number,
-          bus_plate_number
+          phone_number
         )
       `)
       .eq("company_id", companyId)
@@ -121,60 +131,50 @@ export class TripService {
   }
 
   /**
-   *Handles the "Quick Route Search" Form (From -> To)
+   * Handles the "Quick Route Search" Form (From -> To)
+   * Completely fixed to map against your authentic schema properties (origin_name, destination_name on trips table)
    */
   static async searchLiveTripsByTerminals(startTerminal: string, endTerminal: string) {
     if (!startTerminal || !endTerminal) {
       throw new Error("Both start and end terminals are required to run a quick search.");
     }
 
-    // Query the routes table 
-    //Joins the 'trips' table to pull active, un-departed vehicles assigned to this route path
+    // Leverages direct queries matching your trip indexing structures
     const { data, error } = await supabase
-      .from("routes")
+      .from("trips")
       .select(`
         id,
-        route_name,
-        start_terminal,
-        end_terminal,
-        fare,
-        distance_km,
-        duration_minutes,
-        companies (
+        bus_id,
+        origin_name,
+        destination_name,
+        price,
+        ride_status,
+        total_seats,
+        occupied_seats,
+        started_at,
+        companies:company_id (
           name
-        ),
-        trips!inner (
-          id,
-          bus_id,
-          ride_status,
-          total_seats,
-          occupied_seats,
-          started_at
         )
       `)
-      .ilike("start_terminal", `%${startTerminal.trim()}%`)
-      .ilike("end_terminal", `%${endTerminal.trim()}%`)
-      .eq("trips.ride_status", "scheduled") 
-      .order("route_name", { ascending: true });
+      .ilike("origin_name", `%${startTerminal.trim()}%`)
+      .ilike("destination_name", `%${endTerminal.trim()}%`)
+      .eq("ride_status", "scheduled") 
+      .order("created_at", { ascending: false });
 
     if (error) throw error;
 
     // Flatten the response payload structure to make it cleaner to consume on the front-end
-    return (data || []).map((route: any) => ({
-      route_id: route.id,
-      route_name: route.route_name,
-      start_terminal: route.start_terminal,
-      end_terminal: route.end_terminal,
-      distance: route.distance_km,
-      duration: route.duration_minutes,
-      company_name: route.companies?.name || "Independent Fleet",
-      available_buses: (route.trips || []).map((trip: any) => ({
-        trip_id: trip.id,
-        bus_identifier: trip.bus_id,
-        status: trip.ride_status,
-        price: route.fare,
-        seats_available: (trip.total_seats || 14) - (trip.occupied_seats || 0)
-      }))
+    return (data || []).map((trip: any) => ({
+      trip_id: trip.id,
+      route: `${trip.origin_name} ➔ ${trip.destination_name}`,
+      origin: trip.origin_name,
+      destination: trip.destination_name,
+      bus_identifier: trip.bus_id,
+      status: trip.ride_status,
+      price: trip.price,
+      company_name: trip.companies?.name || "Independent Fleet",
+      seats_available: (trip.total_seats || 30) - (trip.occupied_seats || 0),
+      date_time: trip.started_at || "Scheduled"
     }));
   }
-} // 
+}

@@ -2,30 +2,31 @@ import { Request, Response } from "express";
 import { ParkService } from "../services/park.services.js";
 
 /**
- *Register a new Operator and their Park Company (Unified Interface Form)
+ * Register a new Operator and their Park Company (Unified Interface Form)
  */
 export const parkRegister = async (req: Request, res: Response) => {
   try {
-    const { company_name, phone_number, email, password } = req.body;
+    const { company_name, phone_number, email, password, cac_registration_number } = req.body;
 
-    // Basic payload presence verification
-    if (!company_name || !phone_number || !email || !password) {
+    // Basic payload
+    if (!company_name || !phone_number || !email || !password || !cac_registration_number) {
       return res.status(400).json({ error: "All account registration fields are required." });
     }
 
     const existingPark = await ParkService.findParkByName(company_name);
     
-    //Evaluated as a direct object lookup mapping or null
+  
     if (existingPark && existingPark.id) {
       return res.status(409).json({ error: "This company name is already registered in our system." });
     }
 
-    //Passes password straight through because upstream middleware executes hashing parameters
+    // Passes password straight through because upstream middleware executes hashing parameters
     const onboardingResult = await ParkService.registerOperatorWithCompany({
       company_name,
       phone_number,
       email,
-      password_hash: password 
+      password_hash: password,
+      cac_registration_number
     });
 
     return res.status(201).json({
@@ -43,7 +44,7 @@ export const parkRegister = async (req: Request, res: Response) => {
 };
 
 /**
- *Update existing Park settings
+ * Update existing Park settings
  */
 export const updatePark = async (req: Request, res: Response) => {
   try {
@@ -63,7 +64,7 @@ export const updatePark = async (req: Request, res: Response) => {
 };
 
 /**
- *Fetch comprehensive Park configuration profiles
+ * Fetch comprehensive Park configuration profiles
  */
 export const getParkDetails = async (req: Request, res: Response) => {
   try {
