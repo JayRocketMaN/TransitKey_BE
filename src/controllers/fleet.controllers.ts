@@ -1,47 +1,52 @@
 import { supabase } from "../config/supabase.js";
 
 interface FleetFilters {
-  companyName?: string;
+  companyId?: string;
   origin?: string;
   destination?: string;
 }
 
 export const getFleetOverview = async (filters: FleetFilters) => {
+  // Base query construction aligned perfectly with your real table schemas
   let query = supabase
-    .from("vehicles")
+    .from("trips")
     .select(`
-      *,
-      companies!inner (
+      id,
+      bus_id,
+      origin_name,
+      destination_name,
+      price,
+      ride_status,
+      occupied_seats,
+      total_seats,
+      started_at,
+      driver_profiles!inner (
         id,
-        company_name,
-        state_located
-      ),
-      routes!inner (
-        id,
-        route_name,
-        start_terminal,
-        end_terminal,
-        fare
+        full_name,
+        phone_number
       )
     `)
-    .eq("status", "active"); // Only show buses ready to work
+    .eq("ride_status", "in-progress"); // Displays dynamic fleet operations on the active live map
 
-  //Filter by company name if provided
-  if (filters.companyName) {
-    query = query.eq("companies.company_name", filters.companyName); 
+  // Filter matching your exact database indexing strategies
+  if (filters.companyId) {
+    query = query.eq("company_id", filters.companyId); 
   }
 
-  //Filter by origin location 
   if (filters.origin) {
-    query = query.ilike("routes.start_terminal", `%${filters.origin}%`);
+    query = query.ilike("origin_name", `%${filters.origin.trim()}%`);
   }
   
-  //Filter by destination 
   if (filters.destination) {
-    query = query.ilike("routes.end_terminal", `%${filters.destination}%`);
+    query = query.ilike("destination_name", `%${filters.destination.trim()}%`);
   }
 
   const { data, error } = await query;
-  if (error) throw error;
+  
+  if (error) {
+    console.error("Fleet Query Execution Crash:", error.message);
+    throw error;
+  }
+  
   return data;
 };

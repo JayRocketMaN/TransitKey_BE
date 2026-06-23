@@ -1,54 +1,51 @@
 import { Request, Response } from "express";
-import { supabase } from "../config/supabase.js";
+import { NotificationService } from "../services/notification.services.js";
 
 export class NotificationController {
   /**
-   * Fetches all notification alerts for the logged-in passenger
+   * Pulls structural notification updates linked to the authenticated ID
    */
   static async getMyNotifications(req: Request, res: Response) {
     try {
       const userId = req.user?.id;
 
       if (!userId) {
-        return res.status(401).json({ message: "Unauthorized" });
+        return res.status(401).json({ error: "Unauthorized: Invalid session signature." });
       }
 
-      // Fetch notifications sorted by newest first
-      const { data: notifications, error } = await supabase
-        .from("notifications")
-        .select("*")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false });
-
-      if (error) return res.status(500).json({ error: error.message });
+      const notifications = await NotificationService.getNotificationsByUser(userId);
 
       return res.status(200).json({
+        success: true,
         count: notifications?.length || 0,
         notifications: notifications || []
       });
     } catch (error: any) {
-      return res.status(500).json({ error: error.message });
+      console.error("Notification pull crash:", error.message);
+      return res.status(500).json({ error: error.message || "Failed to fetch notifications." });
     }
   }
 
   /**
-   * Marks all notifications as read for the "VIEW ALL NOTIFICATIONS" button
+   * Handles user trigger interactions to batch update reading states
    */
   static async markAllAsRead(req: Request, res: Response) {
     try {
       const userId = req.user?.id;
-      if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
-      const { error } = await supabase
-        .from("notifications")
-        .update({ is_read: true })
-        .eq("user_id", userId);
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized: Invalid session signature." });
+      }
 
-      if (error) return res.status(500).json({ error: error.message });
+      await NotificationService.markUserNotificationsAsRead(userId);
 
-      return res.status(200).json({ message: "All notifications marked as read." });
+      return res.status(200).json({
+        success: true,
+        message: "All alerts marked as read successfully."
+      });
     } catch (error: any) {
-      return res.status(500).json({ error: error.message });
+      console.error("Notification update batch crash:", error.message);
+      return res.status(500).json({ error: error.message || "Failed to update alert statuses." });
     }
   }
 }
