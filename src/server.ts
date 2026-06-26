@@ -10,7 +10,7 @@ const httpServer = createServer(app);
 // --- INITIALIZE SOCKET.IO ---
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: [process.env.FRONTEND_URL, "http://localhost:5173", "http://127.0.0.1:5500" ],
     methods: ["GET", "POST"],
     credentials: true
   }
