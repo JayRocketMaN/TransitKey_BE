@@ -1,19 +1,33 @@
 import { Request, Response } from "express";
 import { VehicleService } from "../services/inventory.services.js";
 
+// Global constant defining allowed vehicle lifecycle statuses to clear type validation leaks
+const ALLOWED_VEHICLE_STATUSES = ["active", "inactive", "maintenance"];
+
 export class VehicleController {
   /**
    * Registers a brand-new vehicle asset under the operator's park,
-   * automatically computing a serialized sequential BUS-ID tag.
+   * automatically computing a serialized sequential BUS-ID tag with strict input sanitation.
    */
   static async addVehicle(req: Request, res: Response) {
     try {
-      const { plate_number, capacity, vehicle_model } = req.body;
+      const { plate_number, capacity, vehicle_model, status } = req.body;
       const operatorId = req.user?.id;
       const companyId = req.user?.company_id;
 
       if (!operatorId) return res.status(401).json({ message: "Unauthorized account session context." });
       if (!plate_number) return res.status(400).json({ error: "plate_number is a required field." });
+
+      // Strict backend validation check for vehicle status values
+      if (status) {
+        const sanitizedStatus = String(status).toLowerCase().trim();
+        if (!ALLOWED_VEHICLE_STATUSES.includes(sanitizedStatus)) {
+          return res.status(400).json({
+            success: false,
+            error: `Validation Mismatch: '${status}' is not a recognized vehicle status type. Use one of: ${ALLOWED_VEHICLE_STATUSES.join(", ")}`
+          });
+        }
+      }
 
       // Resolve Park ID context safely and enforce strict string narrowing to clear compilation error
       let parkId: string = companyId || "";
@@ -42,7 +56,7 @@ export class VehicleController {
         plate_number: plate_number.trim().toUpperCase(),
         capacity: capacity || 14,      
         vehicle_model: vehicle_model || "Standard Bus",
-        status: "active"
+        status: status ? String(status).toLowerCase().trim() : "active"
       });
 
       if (insertError) return res.status(500).json({ error: insertError.message });
@@ -88,7 +102,7 @@ export class VehicleController {
   }
 
   /**
-   * RESTORED: Modifies an existing vehicle asset profile configuration parameters
+   * RESTORED: Modifies an existing vehicle asset profile configuration parameters with enum guard protection.
    */
   static async updateVehicle(req: Request, res: Response) {
     try {
@@ -97,6 +111,17 @@ export class VehicleController {
       const companyId = req.user?.company_id;
 
       if (!operatorId || !vehicle_id) return res.status(400).json({ message: "Missing required vehicle_id execution parameter fields." });
+
+      // Enforce strict check protection during resource state updates
+      if (status) {
+        const sanitizedStatus = String(status).toLowerCase().trim();
+        if (!ALLOWED_VEHICLE_STATUSES.includes(sanitizedStatus)) {
+          return res.status(400).json({
+            success: false,
+            error: `Validation Mismatch: '${status}' is not an applicable state field parameter. Use one of: ${ALLOWED_VEHICLE_STATUSES.join(", ")}`
+          });
+        }
+      }
 
       let parkId = companyId;
       if (!parkId) {
@@ -111,10 +136,10 @@ export class VehicleController {
       }
 
       const updateData: any = {};
-      if (plate_number) updateData.plate_number = plate_number;
+      if (plate_number) updateData.plate_number = plate_number.trim().toUpperCase();
       if (capacity) updateData.capacity = capacity;
       if (vehicle_model) updateData.vehicle_model = vehicle_model;
-      if (status) updateData.status = status;
+      if (status) updateData.status = String(status).toLowerCase().trim();
 
       const { data: updated, error } = await VehicleService.updateVehicle(vehicle_id, parkId, updateData);
 

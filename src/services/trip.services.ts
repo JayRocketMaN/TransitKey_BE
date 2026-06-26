@@ -1,6 +1,6 @@
 import { supabase } from "../config/supabase.js";
 
-type TripStatus = "scheduled" | "in-progress" | "completed" | "cancelled";
+export type TripStatus = "scheduled" | "in-progress" | "completed" | "cancelled";
 
 export interface TripInput {
   driver_id: string;
@@ -12,23 +12,48 @@ export interface TripInput {
   total_seats: number;
 }
 
+interface BookingRowPayload {
+  id: string;
+  seat_number: string;
+  booking_status: string;
+  created_at: string;
+  trips: {
+    id: string;
+    origin_name: string;
+    destination_name: string;
+    price: number;
+    ride_status: string;
+    started_at: string | null;
+  } | null;
+}
+
 export class TripService {
+  
+  // ==========================================
+  // CORE TRANSIT MUTATIONS & HANDSHAKES
+  // ==========================================
+
   /**
    * Handshake: Transition trip from 'scheduled' to 'in-progress' via RPC.
+   * Directly triggers your database PostGIS starting trail initialization routines.
    */
-  static async startTrip(tripId: string, startLat: number, startLng: number) {
+  static async startTrip(tripId: string, startLat: number, startLng: number): Promise<{ data: any; error: null }> {
     const { data, error } = await supabase.rpc('start_trip_transaction', {
       p_trip_id: tripId,
       p_lat: parseFloat(startLat as any), // Enforces clean double-precision floating numbers
       p_lng: parseFloat(startLng as any)  
     });
 
-    if (error) throw new Error(`Handshake failed: ${error.message}`);
+    if (error) {
+      console.error("❌ PostGIS start_trip_transaction RPC Crash:", error.message);
+      throw new Error(`Handshake failed: ${error.message}`);
+    }
+    
     return { data, error: null };
   }
 
   /**
-   * Creates/Schedules a new journey transit manifest
+   * Creates/Schedules a new journey transit manifest.
    */
   static async createTrip(companyId: string, data: TripInput) {
     const { data: trip, error } = await supabase
@@ -37,10 +62,10 @@ export class TripService {
         driver_id: data.driver_id,
         company_id: companyId, 
         bus_id: data.bus_id, 
-        origin_name: data.origin_name,
-        destination_name: data.destination_name,
-        price: data.price,
-        total_seats: data.total_seats,
+        origin_name: String(data.origin_name).trim(),
+        destination_name: String(data.destination_name).trim(),
+        price: parseFloat(data.price as any) || 0.00,
+        total_seats: parseInt(data.total_seats as any) || 14,
         ride_status: "scheduled"
       }])
       .select()
@@ -50,8 +75,8 @@ export class TripService {
   }
 
   /**
-   * Updates an ongoing trip status layout
-   * Refactored to dynamically record timestamps and match your notification trigger requirements.
+   * Updates an ongoing trip status layout.
+   * Dynamically records started_at values to drive live passenger ETAs.
    */
   static async updateTripStatus(tripId: string, status: TripStatus) {
     const updatePayload: Record<string, any> = { 
@@ -59,7 +84,6 @@ export class TripService {
       updated_at: new Date().toISOString()
     };
 
-    // Safely capture vehicle dispatch timestamps for live map views
     if (status === "in-progress") {
       updatePayload.started_at = new Date().toISOString();
     }
@@ -74,8 +98,12 @@ export class TripService {
     return { data, error };
   }
 
+  // ==========================================
+  // DASHBOARD LOOKUPS & VISITOR SUMMARIES
+  // ==========================================
+
   /**
-   * Get active company fleet trip dashboard manifests
+   * Get active company fleet trip dashboard manifests.
    */
   static async getActiveTripsByCompany(companyId: string) {
     const { data, error } = await supabase
@@ -95,10 +123,9 @@ export class TripService {
   }
 
   /**
-   * Fetches all confirmed or pending trip bookings assigned specifically to the logged-in passenger
+   * Fetches all confirmed or pending trip bookings assigned explicitly to the logged-in passenger.
    */
   static async getPassengerUpcomingSummary(userId: string) {
-    // Queries your bookings table, joins the parent trip metrics, and sorts by departure timeline
     const { data, error } = await supabase
       .from("bookings")
       .select(`
@@ -116,30 +143,37 @@ export class TripService {
         )
       `)
       .eq("user_id", userId)
-      .or("booking_status.eq.booked,booking_status.eq.confirmed") // Shows pending holds and paid slots
+      .or("booking_status.eq.booked,booking_status.eq.confirmed") 
       .order("created_at", { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+      console.error("❌ Upcoming Passenger Summary Fetch Failure:", error.message);
+      throw new Error(error.message);
+    }
     
-    return (data || []).map((b: any) => ({
+    const records = (data as unknown as BookingRowPayload[]) || [];
+
+    return records.map((b) => ({
       booking_id: b.id,
       seat_number: b.seat_number,
-      status: b.booking_status.toUpperCase(), // Returns 'CONFIRMED' or 'PENDING' (booked hold)
-      route: `${b.trips?.origin_name} ➔ ${b.trips?.destination_name}`,
+      status: String(b.booking_status).toUpperCase(), // Standardizes holds vs paid slots
+      route: b.trips ? `${b.trips.origin_name} ➔ ${b.trips.destination_name}` : "Unknown Route Manifest",
       date_time: b.trips?.started_at || "TBD"
     }));
   }
 
   /**
-   * Handles the "Quick Route Search" Form (From -> To)
-   * Completely fixed to map against your authentic schema properties (origin_name, destination_name on trips table)
+   * Handles the "Quick Route Search" Form (From -> To).
+   * Pulls scheduled paths matching text parameters before departure flags execute.
    */
   static async searchLiveTripsByTerminals(startTerminal: string, endTerminal: string) {
-    if (!startTerminal || !endTerminal) {
+    const cleanStart = String(startTerminal || '').trim();
+    const cleanEnd = String(endTerminal || '').trim();
+
+    if (!cleanStart || !cleanEnd) {
       throw new Error("Both start and end terminals are required to run a quick search.");
     }
 
-    // Leverages direct queries matching your trip indexing structures
     const { data, error } = await supabase
       .from("trips")
       .select(`
@@ -156,15 +190,19 @@ export class TripService {
           name
         )
       `)
-      .ilike("origin_name", `%${startTerminal.trim()}%`)
-      .ilike("destination_name", `%${endTerminal.trim()}%`)
+      .ilike("origin_name", `%${cleanStart}%`)
+      .ilike("destination_name", `%${cleanEnd}%`)
       .eq("ride_status", "scheduled") 
       .order("created_at", { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+      console.error("❌ Search Live Trips Transaction Error:", error.message);
+      throw new Error(error.message);
+    }
 
-    // Flatten the response payload structure to make it cleaner to consume on the front-end
-    return (data || []).map((trip: any) => ({
+    const records = data || [];
+
+    return records.map((trip: any) => ({
       trip_id: trip.id,
       route: `${trip.origin_name} ➔ ${trip.destination_name}`,
       origin: trip.origin_name,

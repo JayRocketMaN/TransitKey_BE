@@ -5,21 +5,63 @@ import { LocationUpdateBody } from '../types/location.interface.js';
 import { supabase } from '../config/supabase.js';
 
 /**
- * START TRIP (The Handshake)
- * Re-mapped to update trip state natively and trigger database alerts
+ * START TRIP (The Handshake Handlers Matrix)
+ * Smart fallback: Pulls from your auto-populated companies.park_location 
+ * if the driver's hardware device skips passing explicit lat/lng parameters on startup.
  */
 export const handleStartTrip = async (req: Request, res: Response) => {
   try {
-    const { tripId, lat, lng }: LocationUpdateBody = req.body;
+    const { tripId } = req.body;
+    let { lat, lng } = req.body;
 
-    if (!tripId || lat == null || lng == null) {
-      return res.status(400).json({ error: 'tripId, lat, and lng are required to start trip.' });
+    if (!tripId) {
+      return res.status(400).json({ error: 'tripId is required to start trip.' });
     }
 
-    // 1. Execute the RPC Transaction to save geospatial starting points
-    await TripService.startTrip(tripId, lat, lng);
+    // 1. DYNAMIC FALLBACK: If driver device coordinates are missing, fetch the saved corporate park terminal location
+    if (lat == null || lng == null) {
+      console.log(`ℹ️ Driver device omitted coordinates. Querying saved corporate park location for trip: ${tripId}`);
+      
+      const { data: tripContext, error: dbError } = await supabase
+        .from('trips')
+        .select(`
+          id,
+          companies:company_id (
+            park_location
+          )
+        `)
+        .eq('id', tripId)
+        .maybeSingle();
 
-    // 2. Advance the operational status to update the Dashboard Grid instantly
+      if (dbError) throw dbError;
+
+      // Grabs the data safely whether TypeScript infers it as an array or a single object
+     const companiesData = tripContext?.companies;
+     const parkGeo = Array.isArray(companiesData) 
+     ? companiesData[0]?.park_location 
+     : (companiesData as any)?.park_location;
+
+      // Extract raw numbers out of the PostGIS geometry string if it exists
+      if (parkGeo && typeof parkGeo === 'string') {
+        const matches = parkGeo.match(/POINT\(([^)]+)\)/);
+        if (matches && matches[1]) {
+          const parts = matches[1].split(' ');
+          lng = parseFloat(parts[0]);
+          lat = parseFloat(parts[1]);
+          console.log(`🎯 Pre-saved terminal found. Auto-populating parameters: Lat ${lat}, Lng ${lng}`);
+        }
+      }
+    }
+
+    // 2. ABSOLUTE CRASH SAFEGUARD: If both options resolve to null, throw an explicit validation error
+    if (lat == null || lng == null) {
+      return res.status(400).json({ 
+        error: 'Trip cannot start. Please ensure your company terminal address is configured on the dashboard, or pass live driver device coordinates (lat/lng).' 
+      });
+    }
+
+    // 3. Execute the PostGIS RPC transactions and advance operational states natively
+    await TripService.startTrip(tripId, lat, lng);
     await TripService.updateTripStatus(tripId, 'in-progress');
 
     return res.status(200).json({ 
@@ -27,7 +69,8 @@ export const handleStartTrip = async (req: Request, res: Response) => {
       message: 'Trip started successfully. Dashboard and tracking views activated.' 
     });
   } catch (error: any) {
-    return res.status(500).json({ error: error.message });
+    console.error("❌ Handshake Initialization Failure:", error.message);
+    return res.status(500).json({ error: error.message || "Internal Server Error" });
   }
 };
 
@@ -82,6 +125,61 @@ export const handleLocationUpdate = async (req: Request, res: Response) => {
 };
 
 /**
+ * NEW: ADVANCE CURRENT STOP MATRIX (Figma: "MARK AS ARRIVED")
+ * Tracks active route progression and updates tracking channels instantaneously.
+ */
+export const handleAdvanceStop = async (req: Request, res: Response) => {
+  try {
+    const { tripId, completedStop } = req.body;
+
+    if (!tripId || !completedStop) {
+      return res.status(400).json({ error: 'tripId and completedStop parameters are required.' });
+    }
+
+    // 1. Advance the database record context (Update stop state fields in your trips table)
+    const { error: dbError } = await supabase
+      .from('trips')
+      .update({ 
+        current_stop_logs: `Arrived at ${completedStop}`,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', tripId);
+
+    if (dbError) throw dbError;
+
+    // Fetch details to map corporate company broadcasts
+    const { data: tripContext } = await supabase
+      .from("trips")
+      .select("company_id")
+      .eq("id", tripId)
+      .maybeSingle();
+
+    // 2. Broadcast the progress transition across WebSockets to update passenger sidebars & manager grids
+    const io = req.app.get('socketio');
+    if (io) {
+      const progressionPayload = {
+        tripId,
+        completedStop,
+        timestamp: new Date().toISOString(),
+        message: `Bus arrived at ${completedStop}`
+      };
+
+      io.to(tripId).emit('route-progression', progressionPayload);
+      if (tripContext?.company_id) {
+        io.to(`company-${tripContext.company_id}`).emit('fleet-progression-sync', progressionPayload);
+      }
+    }
+
+    return res.status(200).json({
+      status: 'success',
+      message: `Progress step for ${completedStop} logged and transmitted successfully.`
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+};
+
+/**
  * BATCH SYNC (Offline Breadcrumbs Handler)
  */
 export const handleBatchSync = async (req: Request, res: Response) => {
@@ -122,6 +220,30 @@ export const getLiveLocation = async (req: Request, res: Response) => {
     return res.status(200).json({
       status: 'success',
       data: location
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+};
+
+/**
+ * NEW: FETCH CHROMATIC TRAIL HISTORIES (Passenger Map Polylines)
+ * Extracts a clean array of coordinates from the backend LocationService
+ */
+export const getTripHistoryPath = async (req: Request, res: Response) => {
+  try {
+    const { tripId } = req.params;
+
+    if (!tripId) {
+      return res.status(400).json({ error: "tripId parameter is required." });
+    }
+
+    // Call the refactored, strongly typed PostGIS route path loader method
+    const pathCoordinates = await LocationService.getTripRouteHistory(tripId as string);
+
+    return res.status(200).json({
+      status: 'success',
+      data: pathCoordinates
     });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });

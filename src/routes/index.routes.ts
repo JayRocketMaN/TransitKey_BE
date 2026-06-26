@@ -13,6 +13,7 @@ import trackRoutes from "./track.routes.js";
 import tripRoutes from "./trip.routes.js";
 import notificationRoutes from "./notification.routes.js";
 import dashboardRoutes from "./dashboard.routes.js";
+import passengerRoutes from "./passenger.routes.js";
 
 const router = Router();
 
@@ -30,6 +31,7 @@ router.use("/code", codeRoutes); // /api/generate-code
 router.use("/track", trackRoutes); // /api/track
 router.use("/trip", tripRoutes); // /api/trip
 router.use("/notification", notificationRoutes); // /api/notifications
-router.use("/dashboard", dashboardRoutes);
+router.use("/dashboard", dashboardRoutes); // /api/dashboard
+router.use("/passenger", passengerRoutes); // /api/passengers
 
 export default router;
