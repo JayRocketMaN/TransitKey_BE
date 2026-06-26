@@ -9,7 +9,7 @@ const httpServer = createServer(app);
 
 // 🔥 MULTI-ORIGIN CORS WHITELIST FOR WEBSOCKET CONNECTIONS
 const allowedOrigins = [
-  "https://vercel.app", // Production Vercel web portal
+  "https://transit-key.vercel.app", // Your authentic hosted Vercel deployment link
   "http://localhost:5173",          // Local React development canvas
   "http://127.0.0.1:5173",          // Vite system loopback path
   "http://127.0.0.1:5500",          // Pure JS Local Live Server directory
@@ -19,15 +19,21 @@ const allowedOrigins = [
 // --- INITIALIZE SOCKET.IO WITH DYNAMIC CORS ORIGINS ---
 const io = new Server(httpServer, {
   cors: {
+    // FIXED: Cleared the duplicate property configuration line out of the configuration block
     origin: (origin, callback) => {
+      // Automatically add process.env.FRONTEND_URL dynamically to the whitelist loop if it is set
+      const runtimeWhitelist = [...allowedOrigins];
+      if (process.env.FRONTEND_URL) {
+        runtimeWhitelist.push(process.env.FRONTEND_URL);
+      }
+
       // Allow internal connections or matching origins from the array matrix
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin || runtimeWhitelist.includes(origin)) {
         callback(null, true);
       } else {
         callback(new Error("CORS Policy Violation: WebSocket origin unauthorized."));
       }
     },
-    origin: [process.env.FRONTEND_URL, "http://localhost:5173", "http://127.0.0.1:5500" ],
     methods: ["GET", "POST"],
     credentials: true // Crucial to allow socket context cookie mapping verifications
   }
