@@ -5,8 +5,16 @@ import { CustomJwtPayload } from "../types/express.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecret';
 
-//create and validate users(passengers)
+// create and validate users (passengers / drivers / operators)
 export class AuthService {
+  
+  // ==========================================
+  // USER CREATION & VALIDATION METHODS
+  // ==========================================
+
+  /**
+   * Registers a new user manifest (Passengers / Operators)
+   */
   static async createUser(userData: any) {
     const { email, password, full_name, phone_number, role } = userData;
 
@@ -32,14 +40,20 @@ export class AuthService {
     return data;
   }
 
- 
+  /**
+   * Authenticate user via flexible multi-channel identifier (Email or Phone).
+   * Securely double-quotes parameter values to safely escape special characters like '+'.
+   */
   static async validateUser(identifier: string, password: string) {
-    const cleanIdentifier = identifier.trim();
+    const cleanIdentifier = String(identifier || '').trim();
+    const cleanEmail = cleanIdentifier.toLowerCase();
 
+    // 🔥 THE ABSOLUTE FIX: Wrap template values in explicit double-quotes (\" \")
+    // This forces the query engine to evaluate the string as literal text data.
     const { data: user, error } = await supabase
       .from('my_users')
       .select('*')
-      .or(`email.eq.${cleanIdentifier.toLowerCase()},phone_number.eq.${cleanIdentifier}`)
+      .or(`email.eq.\"${cleanEmail}\",phone_number.eq.\"${cleanIdentifier}\"`)
       .maybeSingle(); 
 
     if (error || !user) throw new Error('Invalid email, phone number, or password');
@@ -60,8 +74,12 @@ export class AuthService {
     return { token, user: payload };
   }
 
+  // ==========================================
+  // ONBOARDING & DASHBOARD OPERATIONS
+  // ==========================================
+
   /**
-   * For Drivers: First time login/activation via code
+   * For Drivers: First time login/activation via reference code
    */
   static async completeDriverActivation(code: string, newPassword: string) {
     const { data: user, error: findError } = await supabase
@@ -123,8 +141,12 @@ export class AuthService {
     return data;
   }
 
+  // ==========================================
+  // SECURITY & CONTAINER UTILITIES
+  // ==========================================
+
   /**
-   *Generates a JWT based on the typed payload
+   * Generates a JWT based on the typed payload
    */
   static generateAccessToken(payload: CustomJwtPayload): string {
     return jwt.sign(payload, JWT_SECRET, {
@@ -133,14 +155,14 @@ export class AuthService {
   }
 
   /**
-   *Standard cookie security settings
+   * Standard cookie security settings
    */
   static getCookieOptions() {
     const isProd = process.env.NODE_ENV === "production";
     return {
       httpOnly: true,
       secure: isProd,
-      sameSite: (isProd ? "strict" : "lax") as "strict" | "lax",
+      sameSite: (isProd ? "none" : "lax") as "none" | "lax",
       maxAge: 8 * 60 * 60 * 1000, 
     };
   }

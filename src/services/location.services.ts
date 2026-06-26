@@ -1,44 +1,101 @@
 import { supabase } from '../config/supabase.js';
 import { LocationUpdateBody } from '../types/location.interface.js';
 
-export class LocationService {
-  /**
-   * Update Live GPS Pin 
-   */
-  static async updateTripLocation(data: LocationUpdateBody) {
-    const { tripId, lat, lng } = data;
+interface BatchPingInput {
+  tripId: string;
+  lat: number;
+  lng: number;
+  timestamp: string;
+}
 
-    // PostGIS standard projection text mapping string (SRID 4326: Longitude Space Latitude)
-    const ewktString = `SRID=4326;POINT(${parseFloat(lng as any)} ${parseFloat(lat as any)})`;
+export class LocationService {
+  
+  // ==========================================
+  // PRIVATE GEOSPATIAL HELPER METHODS
+  // ==========================================
+
+  /**
+   * Helper to build uniform PostGIS Extended Well-Known Text (EWKT) strings.
+   * Crucial rule: PostGIS geography shapes accept Longitude first, then Latitude.
+   */
+  private static toEwktString(lat: number, lng: number): string {
+    const cleanLat = parseFloat(lat as any);
+    const cleanLng = parseFloat(lng as any);
+    return `SRID=4326;POINT(${cleanLng} ${cleanLat})`;
+  }
+
+  /**
+   * Universal internal parser to safely extract float coordinates from native PostGIS outputs.
+   */
+  private static parsePostGisLocation(geoData: any): { lat: number; lng: number } | null {
+    if (!geoData) return null;
+
+    let longitude: number | null = null;
+    let latitude: number | null = null;
+
+    if (typeof geoData === 'string') {
+      const matches = geoData.match(/POINT\(([^)]+)\)/);
+      if (matches && matches[1]) {
+        const parts = matches[1].split(' ');
+        longitude = parseFloat(parts[0]);
+        latitude = parseFloat(parts[1]);
+      }
+    } else if (Array.isArray(geoData.coordinates)) {
+      longitude = geoData.coordinates[0];
+      latitude = geoData.coordinates[1];
+    }
+
+    if (longitude !== null && latitude !== null && !isNaN(longitude) && !isNaN(latitude)) {
+      return { lat: latitude, lng: longitude };
+    }
+
+    return null;
+  }
+
+  // ==========================================
+  // CORE WRITE / MUTATION OPERATIONS
+  // ==========================================
+
+  /**
+   * Update Live GPS Pin (Upserting vehicle_locations table)
+   */
+  static async updateTripLocation(data: LocationUpdateBody): Promise<void> {
+    const { tripId, lat, lng } = data;
+    const ewktString = this.toEwktString(lat, lng);
 
     const { error } = await supabase
       .from('vehicle_locations')
-      .upsert({ 
-        trip_id: tripId, 
-        location: ewktString, 
-        updated_at: new Date().toISOString() 
-      }, { onConflict: 'trip_id' });
+      .upsert(
+        { 
+          trip_id: tripId, 
+          location: ewktString, 
+          updated_at: new Date().toISOString() 
+        }, 
+        { onConflict: 'trip_id' }
+      );
 
     if (error) {
-      console.error(" PostGIS Live GPS Ping Upsert Failure:", error.message);
+      console.error("❌ PostGIS Live GPS Ping Upsert Failure:", error.message);
       throw new Error(error.message);
     }
   }
 
   /**
-   * Batch Sync Offline Data — (using robust native EWKT mapping strings)
+   * Batch Sync Offline Data — (Using robust native EWKT mapping strings)
    */
-  static async syncBatchLocations(batchData: { tripId: string; lat: number; lng: number; timestamp: string }[]) {
+  static async syncBatchLocations(batchData: BatchPingInput[]): Promise<void> {
+    if (!batchData || batchData.length === 0) return;
+
     const historyEntries = batchData.map(point => ({
       trip_id: point.tripId,
-      location: `SRID=4326;POINT(${parseFloat(point.lng as any)} ${parseFloat(point.lat as any)})`,
+      location: this.toEwktString(point.lat, point.lng),
       recorded_at: point.timestamp
     }));
 
     const latestPoint = batchData[batchData.length - 1];
     const currentEntry = {
       trip_id: latestPoint.tripId,
-      location: `SRID=4326;POINT(${parseFloat(latestPoint.lng as any)} ${parseFloat(latestPoint.lat as any)})`,
+      location: this.toEwktString(latestPoint.lat, latestPoint.lng),
       updated_at: latestPoint.timestamp
     };
 
@@ -46,15 +103,19 @@ export class LocationService {
     const { error: liveError } = await supabase.from('vehicle_locations').upsert(currentEntry, { onConflict: 'trip_id' });
 
     if (historyError || liveError) {
-      console.error(" PostGIS Batch Offline Sync Operation Failed:", historyError?.message || liveError?.message);
+      console.error("❌ PostGIS Batch Offline Sync Operation Failed:", historyError?.message || liveError?.message);
       throw new Error("Batch location sync failed.");
     }
   }
 
+  // ==========================================
+  // READ / SPATIAL LOOKUP QUERY METHODS
+  // ==========================================
+
   /**
    * Spatial Searching RPC — Handled by PostGIS Stored Function
    */
-  static async searchBusesNearby(lat: number, lng: number, radiusMeters: number = 5000) {
+  static async searchBusesNearby(lat: number, lng: number, radiusMeters: number = 5000): Promise<any> {
     const { data, error } = await supabase.rpc('search_available_buses', {
       user_lat: lat,
       user_lng: lng,
@@ -66,22 +127,19 @@ export class LocationService {
   }  
   
   /**
-   * PRODUCTION LIVE LOCATION FETCH
+   * PRODUCTION LIVE LOCATION FETCH — (Reads directly from stored RPC function)
    */
-  static async getLatestTripLocation(tripId: string) {
-    // Let Supabase fetch the row natively without restrictive internal generic checks
+  static async getLatestTripLocation(tripId: string): Promise<any> {
     const { data, error } = await supabase
       .rpc('get_trip_location_coords', { p_trip_id: tripId })
       .maybeSingle();
 
     if (error) {
-      console.error(" Spatial Coordinates RPC Fetch Failure:", error.message);
+      console.error("❌ Spatial Coordinates RPC Fetch Failure:", error.message);
       throw error;
     }
     
     if (!data) return null;
-
-    // Typecast data cleanly as an explicit tracking row mapping payload
     const record = data as any;
 
     return {
@@ -93,10 +151,27 @@ export class LocationService {
   }
 
   /**
-   * Fetch Manager Fleet View with PostGIS Conversion
-   * Fixed to prevent undefined array coordinate crashes from the DB layer
+   * Fetch chronological trip trail coordinates to draw path Polylines on maps
    */
-  static async getManagerFleetView(companyId: string) {
+  static async getTripRouteHistory(tripId: string): Promise<[number, number][]> {
+    const { data, error } = await supabase
+      .from('location_history')
+      .select('location, recorded_at')
+      .eq('trip_id', tripId)
+      .order('recorded_at', { ascending: true });
+
+    if (error) throw error;
+
+    return data?.map((entry: any) => {
+      const parsed = this.parsePostGisLocation(entry.location);
+      return parsed ? [parsed.lat, parsed.lng] as [number, number] : null;
+    }).filter((coord): coord is [number, number] => coord !== null) || [];
+  }
+
+  /**
+   * Fetch Manager Fleet View with PostGIS Array Conversion
+   */
+  static async getManagerFleetView(companyId: string): Promise<any[]> {
     const { data, error } = await supabase
       .from('trips')
       .select(`
@@ -118,25 +193,8 @@ export class LocationService {
 
     if (error) throw error;
 
-    // Standardize mapping parameters into clean float coordinates safely
     return data?.map((trip: any) => {
-      const geoData = trip.vehicle_locations?.location as any;
-      
-      let longitude = null;
-      let latitude = null;
-
-      // Safe evaluation parser fallback string extraction handles hex/WKT shapes safely
-      if (geoData && typeof geoData === 'string') {
-        const matches = geoData.match(/POINT\(([^)]+)\)/);
-        if (matches && matches[1]) {
-          const parts = matches[1].split(' ');
-          longitude = parseFloat(parts[0]);
-          latitude = parseFloat(parts[1]);
-        }
-      } else if (geoData && Array.isArray(geoData.coordinates)) {
-        longitude = geoData.coordinates[0];
-        latitude = geoData.coordinates[1];
-      }
+      const parsedCoords = this.parsePostGisLocation(trip.vehicle_locations?.location);
 
       return {
         id: trip.id,
@@ -148,10 +206,7 @@ export class LocationService {
         seats_summary: `${trip.occupied_seats || 0}/${trip.total_seats || 30}`,
         driver_name: trip.driver_profiles ? trip.driver_profiles.full_name : "Unassigned Driver",
         updated_at: trip.vehicle_locations?.updated_at || null,
-        coordinates: longitude !== null && latitude !== null ? {
-          lat: latitude, 
-          lng: longitude  
-        } : null
+        coordinates: parsedCoords ? { lat: parsedCoords.lat, lng: parsedCoords.lng } : null,
       };
     }) || [];
   }

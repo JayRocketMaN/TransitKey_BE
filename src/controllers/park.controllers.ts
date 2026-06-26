@@ -8,14 +8,13 @@ export const parkRegister = async (req: Request, res: Response) => {
   try {
     const { company_name, phone_number, email, password, cac_registration_number } = req.body;
 
-    // Basic payload
+    // Basic payload presence checks
     if (!company_name || !phone_number || !email || !password || !cac_registration_number) {
       return res.status(400).json({ error: "All account registration fields are required." });
     }
 
     const existingPark = await ParkService.findParkByName(company_name);
     
-  
     if (existingPark && existingPark.id) {
       return res.status(409).json({ error: "This company name is already registered in our system." });
     }
@@ -44,17 +43,30 @@ export const parkRegister = async (req: Request, res: Response) => {
 };
 
 /**
- * Update existing Park settings
+ * Update existing Park settings & capture geospatial coordinates
+ * Automatically resolves coordinates via text address when lat/lng are omitted.
  */
 export const updatePark = async (req: Request, res: Response) => {
   try {
     const operatorId = req.user?.id;
     if (!operatorId) return res.status(401).json({ error: "Unauthorized" });
 
-    const updatedPark = await ParkService.updateParkByOperator(operatorId, req.body);
+    const { park_name, park_location, cac_registration_number, lat, lng } = req.body;
+
+    // Build unified data object. Lat/Lng will parse to numbers if explicitly passed from a map picker.
+    const updatePayload = {
+      park_name,
+      park_location, // Human-readable address string
+      cac_registration_number,
+      lat: lat != null ? parseFloat(lat) : undefined,
+      lng: lng != null ? parseFloat(lng) : undefined
+    };
+
+    // Forward to the service layer (where automated geocoding checks execute)
+    const updatedPark = await ParkService.updateParkByOperator(operatorId, updatePayload);
 
     return res.status(200).json({ 
-      message: "Park updated successfully",
+      message: "Park updated successfully. Coordinates synchronized successfully.",
       data: updatedPark 
     });
   } catch (error: any) {

@@ -2,7 +2,9 @@ import { Request, Response, NextFunction } from "express";
 import { body, validationResult, ValidationChain } from "express-validator";
 import bcrypt from "bcryptjs"; 
 
-//INDIVIDUAL VALIDATION RULES
+// ==========================================
+// INDIVIDUAL VALIDATION RULES
+// ==========================================
 
 export const emailValidation: ValidationChain = body("email")
   .optional()
@@ -31,7 +33,6 @@ export const phoneValidation: ValidationChain = body("phone_number")
   .notEmpty()
   .withMessage("Phone number is required");
 
-
 export const companyNameValidation: ValidationChain = body("company_name")
   .isLength({ min: 5, max: 200 })
   .withMessage("Company name must be between 5 and 200 characters");
@@ -44,13 +45,18 @@ export const passengerPhoneValidation: ValidationChain = body("phone_number")
   .notEmpty()
   .withMessage("Phone number is required");
 
-// Flexible login rule
+/**
+ * Flexible login rule.
+ * Uses a clean .trim() instead of .normalizeEmail() to protect phone number string lengths and + indicators.
+ */
 export const loginIdentifierValidation: ValidationChain = body("identifier")
   .notEmpty()
-  .withMessage("Email or Phone number is required to login");
+  .withMessage("Email or Phone number is required to login")
+  .trim(); 
 
-
-//CORE EXECUTION MIDDLEWARES
+// ==========================================
+// CORE EXECUTION MIDDLEWARES
+// ==========================================
 
 export const validateInput = (
   req: Request, 
@@ -66,7 +72,7 @@ export const validateInput = (
 
 /**
  * AUTOMATED HASHING 
-  */
+ */
 export const hashPasswordPayload = async (
   req: Request,
   res: Response,
@@ -85,8 +91,10 @@ export const hashPasswordPayload = async (
   }
 };
 
+// ==========================================
+// BUNDLED ROUTE RULES
+// ==========================================
 
-//BUNDLED ROUTE RULES
 // For Manager / Admin Registration
 export const registerRules = [
   emailValidation,
@@ -98,7 +106,7 @@ export const registerRules = [
   hashPasswordPayload 
 ];
 
-//UPDATED STANDARD LOGIN BUNDLE: Uses dynamic loginIdentifierValidation to check for 'identifier(email/phone_number)'
+// FIXED STANDARD LOGIN BUNDLE: Completely isolated from emailValidation to safeguard phone formats
 export const loginRules = [
   loginIdentifierValidation,
   passwordValidation,

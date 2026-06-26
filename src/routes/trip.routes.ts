@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { TripController } from "../controllers/trip.controllers.js";
+import * as locationController from "../controllers/location.controllers.js"; // NEW: Imported to wire up your clean handshake fallback
 import { authorize } from "../middleware/auth.middleware.js";
 
 const router = Router();
@@ -10,8 +11,8 @@ router.get("/summary", authorize(["passenger", "admin"]), TripController.getMySu
 // Allows park administrators to schedule a new transit manifest
 router.post("/schedule", authorize(["admin"]), TripController.createTrip);
 
-// Initiates a trip and broadcasts GPS updates (Accessible by drivers on the road or admin operators via dashboard override)
-router.post("/start", authorize(["admin", "driver"]), TripController.startTrip);
+// DYNAMIC FIX: Points to locationController to process PostGIS trail handshakes and automated park fallbacks seamlessly
+router.post("/start", authorize(["admin", "driver"]), locationController.handleStartTrip);
 
 // Fetches active company trips for operator panels and drivers
 router.get("/active", authorize(["admin", "driver"]), TripController.getMyTrips);

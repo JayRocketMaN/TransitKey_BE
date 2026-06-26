@@ -15,5 +15,9 @@ router.get('/live/:tripId', locationController.getLiveLocation);
 
 // Sync coordinates collected during offline/dead-zones (Expanded to admin role for diagnostic sync pushes)
 router.post('/batch-sync', authorize(['admin', 'driver']), locationController.handleBatchSync);
+// Route references to add inside location.routes.ts
+router.post('/advance-stop', authorize(['driver']), locationController.handleAdvanceStop);
+router.get('/history/:tripId', locationController.getTripHistoryPath);
+
 
 export default router;

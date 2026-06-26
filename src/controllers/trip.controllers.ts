@@ -3,8 +3,13 @@ import { TripService, TripInput } from "../services/trip.services.js";
 import { supabase } from "../config/supabase.js";
 
 export class TripController {
+  
+  // ==========================================
+  // MANIFEST MANAGEMENT OPERATIONS
+  // ==========================================
+
   /**
-   * Creates/Schedules a new journey transit manifest
+   * Creates/Schedules a new journey transit manifest.
    * SAFE REGISTRY CHECK: Validates vehicle existence via UUID or Plate Number text string.
    */
   static async createTrip(req: Request, res: Response) {
@@ -14,9 +19,9 @@ export class TripController {
       const jwtCompanyId = req.user?.company_id || (req.user as any)?.company_id;
 
       // DIAGNOSTIC LOG: Watch terminal for issues
-      console.log(" [TripController.createTrip] Handshake -> Role:", userRole, " | User ID:", operatorId);
+      console.log("🎬 [TripController.createTrip] Handshake -> Role:", userRole, " | User ID:", operatorId);
 
-      if (userRole !== 'admin' || !operatorId) {
+      if (userRole !== 'admin' && userRole !== 'operator' && userRole !== 'admin') {
         return res.status(403).json({ message: "Only operators can create trips." });
       }
 
@@ -27,7 +32,7 @@ export class TripController {
       const inputBusId = String(req.body.bus_id || req.body.busId || "").trim();
       if (!inputBusId) return res.status(400).json({ error: "bus_id (Vehicle UUID or Plate Number) is a required field." });
 
-      // Regular Expression to check if the incoming bus_id parameter matches a valid UUID pattern
+      // Check if the incoming bus_id parameter matches a valid UUID pattern
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(inputBusId);
 
       let vehicleQuery = supabase
@@ -46,7 +51,7 @@ export class TripController {
       const { data: verifiedVehicle, error: vehicleError } = await vehicleQuery.maybeSingle();
 
       if (vehicleError) {
-        console.error(" [TripController.createTrip] Vehicle Query Failure:", vehicleError.message);
+        console.error("❌ [TripController.createTrip] Vehicle Query Failure:", vehicleError.message);
         return res.status(500).json({ error: `Fleet verification database failure: ${vehicleError.message}` });
       }
       
@@ -60,7 +65,7 @@ export class TripController {
       const tripData: TripInput = {
         driver_id: req.body.driver_id || req.body.driverId,
         company_id: jwtCompanyId, 
-        bus_id: verifiedVehicle.plate_number, // Saves the alphanumeric text string to satisfy public.trips table constraints
+        bus_id: verifiedVehicle.plate_number, // Saves alphanumeric text to satisfy public.trips constraints
         origin_name: req.body.origin_name || req.body.originName,
         destination_name: req.body.destination_name || req.body.destinationName,
         price: req.body.price !== undefined ? parseFloat(req.body.price) : 0.00,
@@ -72,14 +77,12 @@ export class TripController {
       if (!tripData.origin_name) return res.status(400).json({ error: "origin_name is a required field." });
       if (!tripData.destination_name) return res.status(400).json({ error: "destination_name is a required field." });
       
-      // Passes the validated company ID parameters out to service handler layers
       const result = await TripService.createTrip(jwtCompanyId, tripData);
 
       const data = (result as any).data || result;
       const error = (result as any).error;
 
       if (error) {
-        // Prevent constraint mismatch messages causing confusion
         if (error.code === "23505" || error.code === "23503") {
           return res.status(400).json({ error: "Database relation constraint violation. Please verify that your driver_id or company_id values are valid records." });
         }
@@ -93,30 +96,48 @@ export class TripController {
   }
 
   /**
-   * Transitions trip status to 'in-progress' when driver leaves terminal park
+   * Completes or cancels a trip journey.
    */
-  static async startTrip(req: Request, res: Response) {
+  static async completeTrip(req: Request, res: Response) {
     try {
-      const tripId = req.body.trip_id || req.body.tripId;
-      
-      if (!tripId) {
-        return res.status(400).json({ error: "trip_id is required in request body" });
+      const tripId = req.body.tripId || req.body.trip_id;
+      const status = req.body.status;
+
+      if (!tripId || !status) {
+        return res.status(400).json({ message: "tripId and status are required fields." });
       }
 
-      const result = await TripService.updateTripStatus(tripId, 'in-progress');
+      const normalizedStatus = String(status).toLowerCase().trim();
+      const databaseAllowedStatuses = ["completed", "cancelled"];
+
+      if (!databaseAllowedStatuses.includes(normalizedStatus)) {
+        return res.status(400).json({ 
+          message: `Status mismatch. Use 'completed' or 'cancelled' to align with DB rules.` 
+        });
+      }
+
+      const result = await TripService.updateTripStatus(tripId, normalizedStatus as any);
       
       const data = (result as any).data || result;
       const error = (result as any).error;
 
       if (error) return res.status(500).json({ error: error.message });
-      return res.status(200).json({ message: "Trip is now in progress", trip: data });
+
+      return res.status(200).json({
+        message: "Trip status updated successfully",
+        trip: data || { id: tripId, status: normalizedStatus },
+      });
     } catch (error: any) {
-      return res.status(500).json({ error: error.message });
+      return res.status(500).json({ error: error.message || "Internal Server Error" });
     }
   }
 
+  // ==========================================
+  // DASHBOARD SUMMARY & READ OPERATIONS
+  // ==========================================
+
   /**
-   * Get active company fleet trip dashboard manifests
+   * Get active company fleet trip dashboard manifests.
    */
   static async getMyTrips(req: Request, res: Response) {
     try {
@@ -140,45 +161,7 @@ export class TripController {
   }
 
   /**
-   * Completes a trip journey
-   */
-  static async completeTrip(req: Request, res: Response) {
-    try {
-      const tripId = req.body.tripId || req.body.trip_id;
-      const status = req.body.status;
-
-      if (!tripId || !status) {
-        return res.status(400).json({ message: "tripId and status are required fields." });
-      }
-
-      const normalizedStatus = String(status).toLowerCase().trim();
-      const databaseAllowedStatuses = ["completed", "cancelled"];
-
-      if (!databaseAllowedStatuses.includes(normalizedStatus)) {
-        return res.status(400).json({ 
-          message: `Status mismatch. Use 'completed' or 'cancelled' to align with DB rules.` 
-        });
-      }
-
-      // Sync status updates 
-      const result = await TripService.updateTripStatus(tripId, normalizedStatus as any);
-      
-      const data = (result as any).data || result;
-      const error = (result as any).error;
-
-      if (error) return res.status(500).json({ error: error.message });
-
-      return res.status(200).json({
-        message: "Trip status updated successfully",
-        trip: data || { id: tripId, status: normalizedStatus },
-      });
-    } catch (error: any) {
-      return res.status(500).json({ error: error.message || "Internal Server Error" });
-    }
-  }
-
-  /**
-   * Fetches all pending holds and paid tickets assigned explicitly to the logged-in user
+   * Fetches all pending holds and paid tickets assigned explicitly to the logged-in passenger user.
    */
   static async getMySummary(req: Request, res: Response) {
     try {

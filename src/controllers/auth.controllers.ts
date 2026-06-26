@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { AuthService } from '../services/auth.services.js'; 
+import { ParkService } from '../services/park.services.js'; // Imported to leverage your unified driver transaction logic
 
 /**
  * Registers a new user (Passenger / Operator)
@@ -26,7 +27,14 @@ export const login = async (req: Request, res: Response) => {
     // Diagnostic Log: Verify output from services.ts
     console.log("[AuthController.login] Authenticated User Profile:", result.user);
 
-    res.cookie('accessToken', result.token, AuthService.getCookieOptions());
+    // Overwrite baseline defaults with cross-origin capability options to satisfy the Vite Map UI
+    res.cookie('accessToken', result.token, {
+      ...AuthService.getCookieOptions(),
+      httpOnly: true,
+      secure: true, // Required for sameSite: "none" browser transfers
+      sameSite: "none", // Allows localhost cross-port token transmissions
+      path: '/'
+    });
 
     res.status(200).json({ user: result.user });
   } catch (error: any) {
@@ -35,16 +43,50 @@ export const login = async (req: Request, res: Response) => {
 };
 
 /**
- *Initial activation for drivers via reference code
+ * Initial activation for drivers via reference code.
+ * Refactored to be perfectly BACKWARDS-COMPATIBLE with your old Postman execution scripts 
+ * while natively processing the new descriptive fields from your Driver Onboarding layout.
  */
 export const activateDriver = async (req: Request, res: Response) => {
   try {
-    const { code, password } = req.body;
-    await AuthService.completeDriverActivation(code, password);
-    
-    res.status(200).json({ message: "Account activated. You can now login." });
+    // Gracefully handle parameter extraction across both old and new naming variants
+    const operatorCode = req.body.code || req.body.operator_code;
+    const rawPassword = req.body.password;
+    const confirmPassword = req.body.confirmPassword || req.body.password; // Graceful fallback mirrors old payloads
+    const phoneNumber = req.body.phone_number || req.body.phone || "";
+
+    // 1. Mandatory presence validation checks
+    if (!operatorCode || !rawPassword) {
+      return res.status(400).json({ error: "Missing required operational parameters (code/operator_code and password)." });
+    }
+
+    // 2. Perform frontend password parity matching rules validation check
+    if (rawPassword !== confirmPassword) {
+      return res.status(400).json({ error: "Password verification check failure. Passwords do not match." });
+    }
+
+    const cleanCode = String(operatorCode).trim();
+    if (cleanCode.length !== 6) {
+      return res.status(400).json({ error: "Operator Activation Code must be a clean 6-digit text identifier string." });
+    }
+
+    // 3. Fire the unified transaction handler block now clean-merged inside your ParkService
+    const activatedUser = await ParkService.finalizeDriverOnboardingTransaction(
+      cleanCode,
+      rawPassword, // Passes down the password context cleanly (Hash wrap can layer internally or within service)
+      String(phoneNumber).trim()
+    );
+
+    // 4. Return the exact verification string text payload expected by your existing Postman test suite
+    res.status(200).json({ 
+      message: "Account activated. You can now login.",
+      developer_note: "Successfully updated database registration profiles context.",
+      activated_id: activatedUser.id
+    });
+
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    console.error(" [AuthController.activateDriver] Processing Failure:", error.message);
+    res.status(400).json({ error: error.message || "Failed to process driver platform validation." });
   }
 };
 
@@ -107,6 +149,8 @@ export const getProfile = async (req: Request, res: Response) => {
 export const logout = (req: Request, res: Response) => {
   res.cookie('accessToken', '', {
     httpOnly: true,
+    secure: true,
+    sameSite: "none",
     expires: new Date(0),
     path: '/',
   });
@@ -128,7 +172,14 @@ export const newToken = (req: Request, res: Response) => {
     };
 
     const newAccessToken = AuthService.generateAccessToken(payload);
-    res.cookie("accessToken", newAccessToken, AuthService.getCookieOptions());
+    
+    res.cookie("accessToken", newAccessToken, {
+      ...AuthService.getCookieOptions(),
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+      path: '/'
+    });
 
     return res.status(201).json({ message: "successful" });
   } catch (error: any) {
