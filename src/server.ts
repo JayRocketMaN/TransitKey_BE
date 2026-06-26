@@ -27,6 +27,7 @@ const io = new Server(httpServer, {
         callback(new Error("CORS Policy Violation: WebSocket origin unauthorized."));
       }
     },
+    origin: [process.env.FRONTEND_URL, "http://localhost:5173", "http://127.0.0.1:5500" ],
     methods: ["GET", "POST"],
     credentials: true // Crucial to allow socket context cookie mapping verifications
   }
