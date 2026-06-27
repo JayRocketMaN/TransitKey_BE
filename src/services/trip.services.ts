@@ -104,13 +104,14 @@ export class TripService {
 
   /**
    * Get active company fleet trip dashboard manifests.
+   * Adjusted to join against 'driver_profiles' matching your table foreign key.
    */
   static async getActiveTripsByCompany(companyId: string) {
     const { data, error } = await supabase
       .from("trips")
       .select(`
         *,
-        driver_profiles:driver_id (
+        driver_profiles!trips_driver_id_fkey ( -- Explicitly declares the true constraint link path
           full_name,
           phone_number
         )
@@ -133,7 +134,7 @@ export class TripService {
         seat_number,
         booking_status,
         created_at,
-        trips:trip_id (
+        trips ( -- Leverages standard flat relationship mapping structure
           id,
           origin_name,
           destination_name,
@@ -156,7 +157,7 @@ export class TripService {
     return records.map((b) => ({
       booking_id: b.id,
       seat_number: b.seat_number,
-      status: String(b.booking_status).toUpperCase(), // Standardizes holds vs paid slots
+      status: String(b.booking_status).toUpperCase(), 
       route: b.trips ? `${b.trips.origin_name} ➔ ${b.trips.destination_name}` : "Unknown Route Manifest",
       date_time: b.trips?.started_at || "TBD"
     }));
@@ -186,7 +187,7 @@ export class TripService {
         total_seats,
         occupied_seats,
         started_at,
-        companies:company_id (
+        companies!fk_trips_company ( -- Explicitly declares your custom table index constraint
           name
         )
       `)

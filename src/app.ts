@@ -14,7 +14,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-// 🔥 MULTI-ORIGIN CORS WHITELIST MATRIX
+//MULTI-ORIGIN CORS WHITELIST MATRIX
 const allowedOrigins = [
   "https://vercel.app", // Production layout hosted workspace portal on Vercel
   "http://localhost:5173",          // Local React development platform engine container

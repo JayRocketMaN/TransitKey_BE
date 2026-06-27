@@ -7,7 +7,7 @@ dotenv.config();
 
 const httpServer = createServer(app);
 
-// 🔥 MULTI-ORIGIN CORS WHITELIST FOR WEBSOCKET CONNECTIONS
+//MULTI-ORIGIN CORS WHITELIST FOR WEBSOCKET CONNECTIONS
 const allowedOrigins = [
   "https://transit-key.vercel.app", // Your authentic hosted Vercel deployment link
   "http://localhost:5173",          // Local React development canvas
@@ -57,8 +57,8 @@ io.on("connection", (socket: Socket) => {
 });
 
 // SAFE PARSING: Enforces a clean base-10 number layout mapping to clear Render build crashes
-const PORT = parseInt(process.env.PORT || "3000", 10);
+const PORT = parseInt(process.env.PORT || "3001", 10);
 
 httpServer.listen(PORT, () => {
-  console.log(`🚀 Server running cleanly on port: ${PORT}`);
+  console.log(`Server running cleanly on port: ${PORT}`);
 });
