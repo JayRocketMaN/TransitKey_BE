@@ -8,6 +8,7 @@ import { supabase } from '../config/supabase.js';
  * START TRIP (The Handshake Handlers Matrix)
  * Smart fallback: Pulls from your auto-populated companies.park_location 
  * if the driver's hardware device skips passing explicit lat/lng parameters on startup.
+ * Uses a highly resilient multi-branch decoder engine to parse PostGIS variants cleanly.
  */
 export const handleStartTrip = async (req: Request, res: Response) => {
   try {
@@ -18,40 +19,93 @@ export const handleStartTrip = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'tripId is required to start trip.' });
     }
 
-    // 1. DYNAMIC FALLBACK: If driver device coordinates are missing, fetch the saved corporate park terminal location
+    // 1. DYNAMIC FALLBACK: If driver device coordinates are missing, fetch the terminal coordinates via independent queries
     if (lat == null || lng == null) {
-      console.log(`ℹ️ Driver device omitted coordinates. Querying saved corporate park location for trip: ${tripId}`);
+      console.log(`🔍 [DIAGNOSTIC] Querying trips for UUID: "${tripId}"`);
       
-      const { data: tripContext, error: dbError } = await supabase
+      // Step A: Grab the un-nested company_id row straight out of the trips manifest table
+      const { data: tripRow, error: tripError } = await supabase
         .from('trips')
-        .select(`
-          id,
-          companies:company_id (
-            park_location
-          )
-        `)
+        .select('id, company_id')
         .eq('id', tripId)
         .maybeSingle();
 
-      if (dbError) throw dbError;
+      if (tripError) {
+        console.error("❌ [DIAGNOSTIC] Trips table query error:", tripError.message);
+        throw tripError;
+      }
 
-      // Grabs the data safely whether TypeScript infers it as an array or a single object
-     const companiesData = tripContext?.companies;
-     const parkGeo = Array.isArray(companiesData) 
-     ? companiesData[0]?.park_location 
-     : (companiesData as any)?.park_location;
+      console.log("🔍 [DIAGNOSTIC] Database raw tripRow output:", JSON.stringify(tripRow));
 
-      // Extract raw numbers out of the PostGIS geometry string if it exists
-      if (parkGeo && typeof parkGeo === 'string') {
-        const matches = parkGeo.match(/POINT\(([^)]+)\)/);
-        if (matches && matches[1]) {
-          const parts = matches[1].split(' ');
-          lng = parseFloat(parts[0]);
-          lat = parseFloat(parts[1]);
-          console.log(`🎯 Pre-saved terminal found. Auto-populating parameters: Lat ${lat}, Lng ${lng}`);
+      if (!tripRow) {
+        console.warn(`❌ [DIAGNOSTIC] No row found in public.trips for ID: ${tripId}`);
+      } else if (!tripRow.company_id) {
+        console.warn(`❌ [DIAGNOSTIC] CRITICAL: tripRow exists but company_id column is EMPTY/NULL inside the database!`);
+      }
+
+      // Step B: If a valid company_id exists, run an independent search on the companies table directly
+      if (tripRow && tripRow.company_id) {
+        console.log(`📡 [DIAGNOSTIC] Proceeding to query companies table for ID: ${tripRow.company_id}`);
+        
+        const { data: companyRow, error: companyError } = await supabase
+          .from('companies')
+          .select('park_location')
+          .eq('id', tripRow.company_id)
+          .maybeSingle();
+
+        if (companyError) throw companyError;
+
+        console.log("🔍 [DIAGNOSTIC] Database raw companyRow output:", JSON.stringify(companyRow));
+        const parkGeo = companyRow?.park_location as any;
+
+        // Step C: ROBUST PARSING ENGINE (Decodes native GeoJSON objects, WKT Text, and Hex EWKB Binaries)
+        if (parkGeo) {
+          console.log("🔍 Inspecting database parkGeo raw data payload:", JSON.stringify(parkGeo));
+
+          // Branch 1: If Supabase returns it as a native PostGREST GeoJSON Object type
+          if (typeof parkGeo === 'object' && parkGeo.coordinates) {
+            lng = parseFloat(parkGeo.coordinates[0]);
+            lat = parseFloat(parkGeo.coordinates[1]);
+            console.log(`🎯 GeoJSON Object parsed successfully! Auto-populating parameters: Lat ${lat}, Lng ${lng}`);
+          } 
+          // Branch 2: If Supabase returns it as a Hexadecimal EWKB binary string (The Localhost Fix)
+          else if (typeof parkGeo === 'string' && !parkGeo.includes('POINT')) {
+            try {
+              // Convert hex characters string into a raw standard memory Buffer binary block
+              const buffer = Buffer.from(parkGeo, 'hex');
+              
+              // Skip the PostGIS geography header parameters bytes (Endianness, Type, SRID) to read coordinates fields directly
+              // Coordinates start at byte offset 9 inside standard 4326 EWKB shapes layout
+              lng = buffer.readDoubleLE(9);
+              lat = buffer.readDoubleLE(17);
+              
+              console.log(`🎯 PostGIS EWKB Hex Binary parsed successfully! Auto-populating parameters: Lat ${lat}, Lng ${lng}`);
+            } catch (hexErr: any) {
+              console.warn("⚠️ Binary coordinate converter failed to process hex layout:", hexErr.message);
+            }
+          }
+          // Branch 3: If Supabase returns it as a Well-Known Text (WKT) string format
+          else if (typeof parkGeo === 'string') {
+            const matches = parkGeo.match(/POINT\(([^)]+)\)/);
+            if (matches && matches) {
+              const parts = matches[1].split(' ');
+              lng = parseFloat(parts[0]);
+              lat = parseFloat(parts[1]);
+              console.log(`🎯 WKT String parsed successfully! Auto-populating parameters: Lat ${lat}, Lng ${lng}`);
+            } else {
+              // Branch 4: Fallback check if the string contains plain comma-separated coordinate characters
+              const rawParts = parkGeo.replace(/[^0-9.,-]/g, '').split(',');
+              if (rawParts.length === 2) {
+                lat = parseFloat(rawParts[0]);
+                lng = parseFloat(rawParts[1]);
+                console.log(`🎯 Raw coordinate text parsed successfully: Lat ${lat}, Lng ${lng}`);
+              }
+            }
+          }
         }
       }
     }
+
 
     // 2. ABSOLUTE CRASH SAFEGUARD: If both options resolve to null, throw an explicit validation error
     if (lat == null || lng == null) {
@@ -237,6 +291,7 @@ export const getTripHistoryPath = async (req: Request, res: Response) => {
     if (!tripId) {
       return res.status(400).json({ error: "tripId parameter is required." });
     }
+  
 
     // Call the refactored, strongly typed PostGIS route path loader method
     const pathCoordinates = await LocationService.getTripRouteHistory(tripId as string);

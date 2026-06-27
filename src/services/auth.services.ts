@@ -8,9 +8,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'supersecret';
 // create and validate users (passengers / drivers / operators)
 export class AuthService {
   
-  // ==========================================
-  // USER CREATION & VALIDATION METHODS
-  // ==========================================
+
 
   /**
    * Registers a new user manifest (Passengers / Operators)
@@ -48,8 +46,7 @@ export class AuthService {
     const cleanIdentifier = String(identifier || '').trim();
     const cleanEmail = cleanIdentifier.toLowerCase();
 
-    // 🔥 THE ABSOLUTE FIX: Wrap template values in explicit double-quotes (\" \")
-    // This forces the query engine to evaluate the string as literal text data.
+    
     const { data: user, error } = await supabase
       .from('my_users')
       .select('*')
@@ -73,10 +70,6 @@ export class AuthService {
 
     return { token, user: payload };
   }
-
-  // ==========================================
-  // ONBOARDING & DASHBOARD OPERATIONS
-  // ==========================================
 
   /**
    * For Drivers: First time login/activation via reference code
@@ -141,11 +134,7 @@ export class AuthService {
     return data;
   }
 
-  // ==========================================
-  // SECURITY & CONTAINER UTILITIES
-  // ==========================================
-
-  /**
+   /**
    * Generates a JWT based on the typed payload
    */
   static generateAccessToken(payload: CustomJwtPayload): string {
@@ -161,9 +150,10 @@ export class AuthService {
     const isProd = process.env.NODE_ENV === "production";
     return {
       httpOnly: true,
-      secure: isProd,
-      sameSite: (isProd ? "none" : "lax") as "none" | "lax",
+      secure: isProd ? true : false, 
+      sameSite: isProd ? "none" : "lax" as "none" | "lax",
       maxAge: 8 * 60 * 60 * 1000, 
+      path: '/'
     };
   }
 }
